@@ -1,136 +1,120 @@
 package mk.hsilomedus.pn532;
+
+import java.io.IOException;
+
+import com.pi4j.io.gpio.exception.UnsupportedBoardType;
+import com.pi4j.io.serial.Baud;
+import com.pi4j.io.serial.DataBits;
+import com.pi4j.io.serial.FlowControl;
+import com.pi4j.io.serial.Parity;
 import com.pi4j.io.serial.Serial;
+import com.pi4j.io.serial.SerialConfig;
 import com.pi4j.io.serial.SerialFactory;
+import com.pi4j.io.serial.SerialPort;
+import com.pi4j.io.serial.StopBits;
 
-@Deprecated
 public class PN532Serial implements IPN532Interface {
+	
+	private static final int READ_TIMEOUT = 1000; //ms
 
-	final static int PN532_ACK_WAIT_TIME = 10; // ms, timeout of waiting for ACK
+	private static final int PN532_TIMEOUT = -2;
+	private static final int PN532_INVALID_FRAME = -3;
+	private static final int PN532_NO_SPACE = -4;
 
-	final static int PN532_INVALID_ACK = -1;
-	final static int PN532_TIMEOUT = -2;
-	final static int PN532_INVALID_FRAME = -3;
-	final static int PN532_NO_SPACE = -4;
+	private boolean debug = false;
+	private boolean debugReads = false;
 
 	Serial serial;
-	byte command;
+	private byte command;
 
 	public PN532Serial() {
 		serial = SerialFactory.createInstance();
 	}
-	
-	private void writeAndLog(byte toSend) {
-		serial.write(toSend);
-		System.out.println("Sent " + Integer.toHexString(toSend));
-	}
-	
-	private void writeAndLog(byte[] toSend) {
-		serial.write(toSend);
-		System.out.println("Sent " + getByteString(toSend));
+
+	@Override
+	public void begin() throws IOException, UnsupportedBoardType, InterruptedException {
+		log("PN532Serial.begin()");
+
+		// ScottyDoesKnow: everything here but speed should be defaults, but might as well not assume
+		SerialConfig config = new SerialConfig();
+		config.device(SerialPort.getDefaultPort())
+			.baud(Baud._115200)
+			.dataBits(DataBits._8)
+			.parity(Parity.NONE)
+			.stopBits(StopBits._1)
+			.flowControl(FlowControl.NONE);
 		
-	}
-	
-	private String getByteString(byte[] arr) {
-		String output = "[";
-		for (int i = 0; i < arr.length; i++) {
-			output+=Integer.toHexString(arr[i]) + " ";
-		}
-		return output.trim() + "]";
+		serial.open(config);
 	}
 
-	/* (non-Javadoc)
-	 * @see IPN532Interface#begin()
-	 */
 	@Override
-	public void begin() {
-		System.out.println("Medium.begin()");
-		serial.open(Serial.DEFAULT_COM_PORT, 115200);
+	public void wakeup() throws IllegalStateException, IOException {
+		log("PN532Serial.wakeup()");
 
-	}
-
-	/* (non-Javadoc)
-	 * @see IPN532Interface#wakeup()
-	 */
-	@Override
-	public void wakeup() {
-		System.out.println("Medium.wakeup()");
-		writeAndLog((byte) 0x55);
-		writeAndLog((byte) 0x55);
-		writeAndLog((byte) 0x00);
-		writeAndLog((byte) 0x00);
-		writeAndLog((byte) 0x00);
+		write((byte) 0x55);
+		write((byte) 0x55);
+		write((byte) 0x00);
+		write((byte) 0x00);
+		write((byte) 0x00);
+		
 		serial.flush();
+		
 		dumpSerialBuffer();
 	}
 
-	private void dumpSerialBuffer() {
-		System.out.println("Medium.dumpSerialBuffer()");
-		while (serial.availableBytes() > 0) {
-			System.out.println("Dumping byte");
-			serial.read();
-		}
-	}
-
-	/* (non-Javadoc)
-	 * @see IPN532Interface#writeCommand(byte[], byte[])
-	 */
 	@Override
-	public CommandStatus writeCommand(byte[] header, byte[] body) throws InterruptedException {
-		System.out.println("Medium.writeCommand(" + header + " " + (body != null ? body : "") + ")");
+	public CommandStatus writeCommand(byte[] header, byte[] body) throws InterruptedException, IllegalStateException, IOException {
+		log("PN532Serial.writeCommand(" + header + " " + (body != null ? body : "") + ")");
+
 		dumpSerialBuffer();
 
 		command = header[0];
 
-		writeAndLog(PN532_PREAMBLE);
-		writeAndLog(PN532_STARTCODE1);
-		writeAndLog(PN532_STARTCODE2);
+		write(PN532_PREAMBLE);
+		write(PN532_STARTCODE1);
+		write(PN532_STARTCODE2);
 
 		int length = header.length + (body != null ? body.length : 0) + 1;
-		writeAndLog((byte) length);
-		// see if this is right
-		writeAndLog((byte) ((~length) + 1));
-		writeAndLog(PN532_HOSTTOPN532);
+		write((byte) length);
+		write((byte) (~length + 1));
 
-		int sum = PN532_HOSTTOPN532;
+		write(PN532_HOSTTOPN532);
+		byte sum = PN532_HOSTTOPN532;
 
-		writeAndLog(header);
+		write(header);
 		for (int i = 0; i < header.length; i++) {
 			sum += header[i];
 		}
 
 		if (body != null) {
-			writeAndLog(body);
+			write(body);
 			for (int i = 0; i < body.length; i++) {
 				sum += body[i];
 			}
 		}
 
-		int checksum = (~sum) + 1;
-		writeAndLog((byte) checksum);
-		writeAndLog(PN532_POSTAMBLE);
+		byte checksum = (byte) (~sum + 1);
+		write(checksum);
+		write(PN532_POSTAMBLE);
+		
 		serial.flush();
+		
 		return readAckFrame();
 	}
 
-	/* (non-Javadoc)
-	 * @see IPN532Interface#writeCommand(byte[])
-	 */
 	@Override
-	public CommandStatus writeCommand(byte header[]) throws InterruptedException {
+	public CommandStatus writeCommand(byte header[]) throws InterruptedException, IllegalStateException, IOException {
 		return writeCommand(header, null);
 	}
 
-	/* (non-Javadoc)
-	 * @see IPN532Interface#readResponse(byte[], int, int)
-	 */
 	@Override
-	public int readResponse(byte[] buffer, int expectedLength, int timeout) throws InterruptedException {
-		System.out.println("Medium.readResponse(..., " + expectedLength + ", " + timeout + ")");
+	public int readResponse(byte[] buffer, int expectedLength, int timeout) throws InterruptedException, IllegalStateException, IOException {
+		log("PN532Serial.readResponse(..., " + expectedLength + ", " + timeout + ")");
+		
 		byte[] tmp = new byte[3];
 		if (receive(tmp, 3, timeout) <= 0) {
 			return PN532_TIMEOUT;
 		}
-
 		if ((byte) 0 != tmp[0] || (byte) 0 != tmp[1] || (byte) 0xFF != tmp[2]) {
 			return PN532_INVALID_FRAME;
 		}
@@ -147,7 +131,6 @@ public class PN532Serial implements IPN532Interface {
 			return PN532_NO_SPACE;
 		}
 
-		/** receive command byte */
 		byte cmd = (byte) (command + 1); // response command
 		if (receive(tmp, 2, timeout) <= 0) {
 			return PN532_TIMEOUT;
@@ -159,12 +142,11 @@ public class PN532Serial implements IPN532Interface {
 		if (receive(buffer, length[0], timeout) != length[0]) {
 			return PN532_TIMEOUT;
 		}
-		int sum = PN532_PN532TOHOST + cmd;
+		byte sum = (byte) (PN532_PN532TOHOST + cmd);
 		for (int i = 0; i < length[0]; i++) {
 			sum += buffer[i];
 		}
 
-		/** checksum and postamble */
 		if (receive(tmp, 2, timeout) <= 0) {
 			return PN532_TIMEOUT;
 		}
@@ -173,75 +155,105 @@ public class PN532Serial implements IPN532Interface {
 		}
 
 		return length[0];
-
 	}
 
-	/* (non-Javadoc)
-	 * @see IPN532Interface#readResponse(byte[], int)
-	 */
 	@Override
-	public int readResponse(byte[] buffer, int expectedLength) throws InterruptedException {
-		return readResponse(buffer, expectedLength, 1000);
+	public int readResponse(byte[] buffer, int expectedLength) throws InterruptedException, IllegalStateException, IOException {
+		return readResponse(buffer, expectedLength, READ_TIMEOUT);
 	}
 
-	CommandStatus readAckFrame() throws InterruptedException {
-		System.out.println("Medium.readAckFrame()");
-		// see what's all the fuzz about these
-		byte PN532_ACK[] = new byte[] { 0, 0, (byte) 0xFF, 0, (byte) 0xFF, 0 };
-		byte ackBuf[] = new byte[PN532_ACK.length];
+	private CommandStatus readAckFrame() throws InterruptedException, IllegalStateException, IOException {
+		log("PN532Serial.readAckFrame()");
+		
+		byte ackBuf[] = new byte[PN532.PN532_ACK.length];
 
-		if (receive(ackBuf, PN532_ACK.length) <= 0) {
+		if (receive(ackBuf, PN532.PN532_ACK.length) <= 0) {
+			log("PN532Serial.readAckFrame() Timeout");
 			return CommandStatus.TIMEOUT;
 		}
-		
+
 		for (int i = 0; i < ackBuf.length; i++) {
-			if (ackBuf[i] != PN532_ACK[i]) {
+			if (ackBuf[i] != PN532.PN532_ACK[i]) {
+				log("PN532Serial.readAckFrame() Invalid");
 				return CommandStatus.INVALID_ACK;
 			}
 		}
 
+		log("PN532Serial.readAckFrame() Success");
 		return CommandStatus.OK;
 	}
 
-	int receive(byte[] buffer, int expectedLength, int timeout) throws InterruptedException {
-//		Thread.sleep(100);
-		System.out.println("Medium.receive(..., " + expectedLength + ", " + timeout + ")");
-		int read_bytes = 0;
-		int ret;
-		long start_millis;
+	int receive(byte[] buffer, int expectedLength, int timeout) throws InterruptedException, IllegalStateException, IOException {
+		log("PN532Serial.receive(..., " + expectedLength + ", " + timeout + ")");
 
-		while (read_bytes < expectedLength) {
-			start_millis = System.currentTimeMillis();
+		int bufferIndex = 0;
+		boolean receivedData;
+		long startMs;
+
+		while (bufferIndex < expectedLength) {
+			startMs = System.currentTimeMillis();
+			receivedData = false;
 			do {
-				if (serial.availableBytes() == 0) {
-					ret = -1;
+				if (serial.available() == 0) {
 					Thread.sleep(10);
 				} else {
-					ret = serial.read();
-				}
-				if (ret >= 0) {
+					buffer[bufferIndex++] = read();
+					receivedData = true;
 					break;
 				}
-			} while ((System.currentTimeMillis() - start_millis) < timeout);
+			} while (timeout == 0 || (System.currentTimeMillis() - startMs) < timeout);
 
-			if (ret < 0) {
-				if (read_bytes > 0) {
-					System.out.println("Read total of " + read_bytes + " bytes.");
-					return read_bytes;
+			if (!receivedData) {
+				if (bufferIndex > 0) {
+					log("Read total of " + bufferIndex + " bytes.");
+					return bufferIndex;
 				} else {
-					System.out.println("Timeout while reading.");
+					log("Timeout while reading.");
 					return PN532_TIMEOUT;
 				}
 			}
-			buffer[read_bytes] = (byte) ret;
-			System.out.println("Read: " + Integer.toHexString(ret));
-			read_bytes++;
 		}
-		return read_bytes;
+		
+		return bufferIndex;
 	}
 
-	int receive(byte[] buffer, int expectedLength) throws InterruptedException {
-		return receive(buffer, expectedLength, 2000);
+	int receive(byte[] buffer, int expectedLength) throws InterruptedException, IllegalStateException, IOException {
+		return receive(buffer, expectedLength, READ_TIMEOUT);
 	}
 
+	private void write(byte toSend) throws IllegalStateException, IOException {
+		log("PN532Serial.write() " + Integer.toHexString(toSend));
+
+		serial.write(toSend);
+	}
+
+	private void write(byte[] toSend) throws IllegalStateException, IOException {
+		log("PN532Serial.write() " + PN532.getByteString(toSend));
+
+		serial.write(toSend);
+	}
+	
+	// Because I'm too lazy to refactor the code
+	private byte read() throws IllegalStateException, IOException {
+		byte result = serial.read(1)[0];
+		if (debugReads) {
+			log("PN532Serial.read() " + Integer.toHexString(result));
+		}
+		return result;
+	}
+
+	private void dumpSerialBuffer() throws IllegalStateException, IOException {
+		log("PN532Serial.dumpSerialBuffer()");
+
+		while (serial.available() > 0) {
+			log("\tDumping byte");
+			read();
+		}
+	}
+
+	private void log(String message) {
+		if (debug) {
+			System.out.println(message);
+		}
+	}
 }

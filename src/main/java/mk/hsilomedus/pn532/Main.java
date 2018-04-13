@@ -1,11 +1,14 @@
 package mk.hsilomedus.pn532;
+
+import java.io.IOException;
+
 public class Main {
 
 	static final byte PN532_MIFARE_ISO14443A = 0x00;
 
-	public static void main(String[] args) throws InterruptedException {
-//		IPN532Interface pn532Interface = new PN532Spi();
-	  IPN532Interface pn532Interface = new PN532I2C();
+	public static void main(String[] args) throws InterruptedException, IOException {
+		// IPN532Interface pn532Interface = new PN532Spi();
+		IPN532Interface pn532Interface = new PN532I2C();
 		PN532 nfc = new PN532(pn532Interface);
 
 		// Start
@@ -18,6 +21,7 @@ public class Main {
 			System.out.println("Didn't find PN53x board");
 			return;
 		}
+		
 		// Got ok data, print it out!
 		System.out.print("Found chip PN5");
 		System.out.println(Long.toHexString((versiondata >> 24) & 0xFF));
@@ -34,8 +38,7 @@ public class Main {
 
 		byte[] buffer = new byte[8];
 		while (true) {
-			int readLength = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A,
-					buffer);
+			int readLength = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, buffer);
 
 			if (readLength > 0) {
 				System.out.println("Found an ISO14443A card");
@@ -53,6 +56,5 @@ public class Main {
 
 			Thread.sleep(100);
 		}
-
 	}
 }
