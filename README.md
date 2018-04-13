@@ -1,4 +1,7 @@
-Updated for personal use over I2C and UART. I wasn't able to get SPI to work, but I think it might be my hardware.
+Updated for personal use over I2C and UART. I wasn't able to get SPI to work, but I think it might be my hardware. Credit for the conversion to Java of the elechouse PN532 library goes to hsilomedus
+
+I highly recommend using libnfc to test your hardware before coding your own stuff. It would've saved me a ton of time trying to get SPI working.
+* https://github.com/nfc-tools/libnfc
 
 Used device: Elechouse PN532 NFC RFID module V3 kits (Note that I didn't buy from their site, so mine could be a knock-off)
 * https://www.elechouse.com/elechouse/index.php?main_page=product_info&cPath=90_93&products_id=2242
