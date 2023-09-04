@@ -1,237 +1,213 @@
 
 package mk.hsilomedus.pn532;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
+import java.lang.reflect.UndeclaredThrowableException;
+import java.nio.ByteBuffer;
 
-import com.pi4j.io.i2c.I2CBus;
-import com.pi4j.io.i2c.I2CDevice;
-import com.pi4j.io.i2c.I2CFactory;
-import com.pi4j.io.i2c.I2CFactory.UnsupportedBusNumberException;
-import com.pi4j.wiringpi.Gpio;
+import com.pi4j.io.exception.IOException;
+import com.pi4j.io.i2c.I2C;
+import com.pi4j.io.i2c.I2CProvider;
 
-public class PN532I2C implements IPN532Interface {
+public class PN532I2C extends PN532Interface<I2C> {
 
-	private static final int DEVICE_ADDRESS = 0x24;
-	
-	private boolean debug = false;
-	private boolean debugReads = false;
+	public static final String PROVIDER_PIGPIO = "pigpio-i2c";
+	public static final String PROVIDER_LINUXFS = "linuxfs-i2c";
 
-	private I2CBus i2cBus;
-	private I2CDevice i2cDevice;
-	private byte command;
+	public static final String DEFAULT_PROVIDER = PROVIDER_PIGPIO;
+	public static final int DEFAULT_BUS = 1;
+	public static final int DEFAULT_DEVICE = 0x24;
 
-	@Override
-	public void begin() throws UnsupportedBusNumberException {
-		try {
-			i2cBus = I2CFactory.getInstance(I2CBus.BUS_1);
-			log("Connected to bus OK!!!");
+	private int bus;
+	private int device;
 
-			i2cDevice = i2cBus.getDevice(DEVICE_ADDRESS);
-			log("Connected to device OK!!!");
+	/**
+	 * Defaults to {@link PN532I2C#DEFAULT_PROVIDER}, {@link PN532I2C#DEFAULT_BUS}, and {@link PN532I2C#DEFAULT_DEVICE}.
+	 */
+	public PN532I2C() {
+		this(DEFAULT_PROVIDER, DEFAULT_BUS, DEFAULT_DEVICE);
+	}
 
-			Thread.sleep(500);
-		} catch (IOException e) {
-			System.out.println("Exception: " + e.getMessage());
-		} catch (InterruptedException e) {
-			System.out.println("Interrupted Exception: " + e.getMessage());
-		}
+	/**
+	 * @param provider The provider to use. Options are {@link PN532I2C#PROVIDER_PIGPIO} or {@link PN532I2C#PROVIDER_LINUXFS}.
+	 */
+	public PN532I2C(String provider, int bus, int device) {
+		super(provider, "i2c-" + bus + "-0x" + Integer.toHexString(device),
+				"I2C " + bus + " 0x" + Integer.toHexString(device),
+				"I2C Bus " + bus + ", Device 0x" + Integer.toHexString(device));
+
+		this.bus = bus;
+		this.device = device;
 	}
 
 	@Override
-	public void wakeup() { }
-
-	@Override
-	public CommandStatus writeCommand(byte[] header, byte[] body) throws InterruptedException {
-		log("pn532i2c.writeCommand(header:" + PN532.getByteString(header) + ", body: " + PN532.getByteString(body) + ")");
-
-		List<Byte> toSend = new ArrayList<Byte>();
-
-		command = header[0];
-		try {
-			toSend.add(PN532_PREAMBLE);
-			toSend.add(PN532_STARTCODE1);
-			toSend.add(PN532_STARTCODE2);
-
-			byte cmd_len = (byte) header.length;
-			cmd_len += (byte) body.length;
-			cmd_len++;
-			byte cmdlen_1 = (byte) (~cmd_len + 1);
-
-			toSend.add(cmd_len);
-			toSend.add(cmdlen_1);
-
-			toSend.add(PN532_HOSTTOPN532);
-
-			byte sum = PN532_HOSTTOPN532;
-
-			for (int i = 0; i < header.length; i++) {
-				toSend.add(header[i]);
-				sum += header[i];
-			}
-
-			for (int i = 0; i < body.length; i++) {
-				toSend.add(body[i]);
-				sum += body[i];
-			}
-
-			byte checksum = (byte) (~sum + 1);
-			toSend.add(checksum);
-			toSend.add(PN532_POSTAMBLE);
-			byte[] bytesToSend = new byte[toSend.size()];
-			for (int i = 0; i < bytesToSend.length; i++) {
-				bytesToSend[i] = toSend.get(i);
-			}
-			log("pn532i2c.writeCommand sending " + PN532.getByteString(bytesToSend));
-			i2cDevice.write(DEVICE_ADDRESS, bytesToSend, 0, bytesToSend.length);
-
-		} catch (IOException e) {
-			System.out.println("pn532i2c.writeCommand exception occured: " + e.getMessage());
-			return CommandStatus.INVALID_ACK;
-		}
-		log("pn532i2c.writeCommand transferring to waitForAck())");
-		return waitForAck(5000);
-
-	}
-
-	private CommandStatus waitForAck(int timeout) throws InterruptedException {
-		log("pn532i2c.waitForAck()");
-
-		byte ackbuff[] = new byte[PN532.PN532_ACK.length + 1];
-
-		int timer = 0;
-		String message = "";
-		while (true) {
-			try {
-				int read = i2cDevice.read(ackbuff, 0, 7);
-				if (debugReads && read > 0) {
-					log("pn532i2c.waitForAck Read " + read + " bytes.");
-				}
-			} catch (IOException e) {
-				message = e.getMessage();
-			}
-
-			if ((ackbuff[0] & 1) > 0) {
-				break;
-			}
-
-			if (timeout != 0) {
-				timer += 10;
-				if (timer > timeout) {
-					log("pn532i2c.waitForAck timeout occured: " + message);
-					return CommandStatus.TIMEOUT;
-				}
-			}
-			Gpio.delay(10);
-
-		}
-
-		for (int i = 1; i < ackbuff.length; i++) {
-			if (ackbuff[i] != PN532.PN532_ACK[i - 1]) {
-				log("pn532i2c.waitForAck Invalid Ack.");
-				return CommandStatus.INVALID_ACK;
-			}
-		}
-		log("pn532i2c.waitForAck OK");
-		return CommandStatus.OK;
-
+	protected I2C getInterface() throws IllegalArgumentException, UndeclaredThrowableException {
+		var config = I2C.newConfigBuilder(pi4j)
+				.id(id)
+				.name(name)
+				.bus(bus)
+				.device(device)
+				.build();
+		I2CProvider i2CProvider = pi4j.provider(provider);
+		return i2CProvider.create(config);
 	}
 
 	@Override
-	public CommandStatus writeCommand(byte[] header) throws InterruptedException {
-		return writeCommand(header, new byte[0]);
+	protected void wakeupInternal() throws InterruptedException {
+		Thread.sleep(500);
 	}
 
 	@Override
-	public int readResponse(byte[] buffer, int expectedLength, int timeout) throws InterruptedException {
-		log("pn532i2c.readResponse");
+	protected void writeCommandInternal(byte[] header, byte[] body) throws IOException {
+		var buffer = ByteBuffer.allocate(header.length + body.length + 8);
 
-		byte response[] = new byte[expectedLength + 2];
+		lastCommand = header[0];
 
-		int timer = 0;
+		buffer.put(PN532_PREAMBLE);
+		buffer.put(PN532_STARTCODE1);
+		buffer.put(PN532_STARTCODE2);
 
-		while (true) {
-			try {
-				int read = i2cDevice.read(response, 0, expectedLength + 2);
-				if (debugReads && read > 0) {
-					log("pn532i2c.waitForAck Read " + read + " bytes.");
-				}
-			} catch (IOException e) {
-				// Nothing, timeout will occur if an error has happened.
-			}
+		byte length = (byte) (header.length + body.length + 1);
+		buffer.put(length);
+		buffer.put((byte) (~length + 1));
 
-			if ((response[0] & 1) > 0) {
-				break;
-			}
+		buffer.put(PN532_HOSTTOPN532);
+		buffer.put(header);
+		buffer.put(body);
 
-			if (timeout != 0) {
-				timer += 10;
-				if (timer > timeout) {
-					log("pn532i2c.readResponse timeout occured.");
-					return -1;
-				}
-			}
-			Gpio.delay(10);
+		byte sum = PN532_HOSTTOPN532;
+		for (int i = 0; i < header.length; i++) {
+			sum += header[i];
+		}
+		for (int i = 0; i < body.length; i++) {
+			sum += body[i];
+		}
+		buffer.put((byte) (~sum + 1));
+
+		buffer.put(PN532_POSTAMBLE);
+
+		log("writeCommand() sending " + PN532Debug.getByteString(buffer.array()));
+		io.write(buffer);
+	}
+
+	@Override
+	protected PN532CommandStatus readAckFrame() throws InterruptedException, IOException {
+		byte[] buffer = new byte[PN532_ACK.length + 1];
+
+		if (!waitForData(buffer, ackTimeout)) {
+			log("readAckFrame() timed out.");
+			return PN532CommandStatus.TIMEOUT;
 		}
 
-		int ind = 1;
+		for (int i = 1; i < buffer.length; i++) {
+			if (buffer[i] != PN532_ACK[i - 1]) {
+				log("readAckFrame() was invalid.");
+				return PN532CommandStatus.INVALID;
+			}
+		}
 
-		if (PN532_PREAMBLE != response[ind++] || PN532_STARTCODE1 != response[ind++]
-				|| PN532_STARTCODE2 != response[ind++]) {
-			log("pn532i2c.readResponse bad starting bytes found");
+		log("readAckFrame() successful.");
+		return PN532CommandStatus.OK;
+	}
+
+	@Override
+	protected int readResponseInternal(byte[] buffer, int expectedLength, int timeout) throws InterruptedException, IOException {
+		byte[] response = new byte[expectedLength + 2];
+
+		if (!waitForData(response, timeout)) {
+			logRead("readResponse() timed out.");
 			return -1;
 		}
 
-		byte length = response[ind++];
-		byte com_length = length;
-		com_length += response[ind++];
-		if (com_length != 0) {
-			log("pn532i2c.readResponse bad length checksum");
+		int i = 1;
+		if (response[i++] != PN532_PREAMBLE || response[i++] != PN532_STARTCODE1 || response[i++] != PN532_STARTCODE2) {
+			logRead("readResponse() received bad starting bytes.");
 			return -1;
 		}
 
-		byte cmd = 1;
-		cmd += command;
+		byte length = response[i++];
 
-		if (PN532_PN532TOHOST != response[ind++] || (cmd) != response[ind++]) {
-			log("pn532i2c.readResponse bad command check.");
+		byte lengthCheck = (byte) (length + response[i++]);
+		if (lengthCheck != 0) {
+			logRead("readResponse() received bad length checksum.");
+			return -1;
+		}
+
+		byte command = (byte) (lastCommand + 1);
+		if (response[i++] != PN532_PN532TOHOST || response[i++] != command) {
+			logRead("readResponse() received bad command.");
 			return -1;
 		}
 
 		length -= 2;
 		if (length > expectedLength) {
-			log("pn532i2c.readResponse not enough space");
+			logRead("readResponse() received length greater than expectedLength.");
 			return -1;
 		}
 
 		byte sum = PN532_PN532TOHOST;
-		sum += cmd;
+		sum += command;
 
-		for (int i = 0; i < length; i++) {
-			buffer[i] = response[ind++];
-			sum += buffer[i];
+		for (int j = 0; j < length; j++) {
+			buffer[j] = response[i++];
+			sum += buffer[j];
 		}
 
-		byte checksum = response[ind++];
-		checksum += sum;
-		if (0 != checksum) {
-			log("pn532i2c.readResponse bad checksum");
+		byte check = (byte) (sum + response[i++]);
+		if (check != 0) {
+			logRead("readResponse() received bad checksum.");
 			return -1;
 		}
 
-		return length;
+		if (response[i] != PN532_POSTAMBLE) {
+			logRead("readResponse() received bad postamble.");
+			return -1;
+		}
 
+		logRead("readResponse() returned " + length + " bytes: " + PN532Debug.getByteString(buffer));
+		return length;
 	}
 
 	@Override
-	public int readResponse(byte[] buffer, int expectedLength) throws InterruptedException {
-		return readResponse(buffer, expectedLength, 1000);
+	void close() {
+		log("close()");
+		if (io != null && io.isOpen()) {
+			io.close();
+		}
+		log("close() successful.");
 	}
 
-	private void log(String message) {
-		if (debug) {
-			System.out.println(message);
+	private boolean waitForData(byte[] buffer, int timeout) throws InterruptedException, IOException {
+		long end = System.currentTimeMillis() + timeout;
+		while (true) {
+			int readTotal = io.read(buffer);
+			if (readTotal > 0 && (buffer[0] & 1) == 1) {
+				logRead("waitForData() received " + readTotal + " bytes: " + PN532Debug.getByteString(buffer));
+
+				while (readTotal < buffer.length) {
+					int read = io.read(buffer, readTotal, buffer.length - readTotal);
+
+					if (read > 0) {
+						logRead("waitForData() received " + read + " bytes: " + PN532Debug.getByteString(buffer));
+
+						readTotal += read;
+						if (readTotal >= buffer.length) { // >= for safety
+							break;
+						}
+					}
+
+					Thread.sleep(10);
+					if (System.currentTimeMillis() > end) {
+						return false;
+					}
+				}
+
+				return true;
+			}
+
+			Thread.sleep(10);
+			if (System.currentTimeMillis() > end) {
+				return false;
+			}
 		}
 	}
 }

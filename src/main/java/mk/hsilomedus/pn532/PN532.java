@@ -1,134 +1,177 @@
 package mk.hsilomedus.pn532;
 
-import java.io.IOException;
+import java.lang.reflect.UndeclaredThrowableException;
 
-import com.pi4j.io.gpio.exception.UnsupportedBoardType;
-import com.pi4j.io.i2c.I2CFactory.UnsupportedBusNumberException;
+import com.pi4j.io.IO;
+import com.pi4j.io.exception.IOException;
 
-public class PN532 {
-	
-	public static final byte PN532_ACK[] = new byte[] { 0, 0, (byte) 0xFF, 0, (byte) 0xFF, 0 };
+public class PN532<T extends IO<T, ?, ?>> {
 
-	private static final byte PN532_COMMAND_GETFIRMWAREVERSION = 0x02;
-	private static final byte PN532_COMMAND_SAMCONFIGURATION = 0x14;
-	private static final byte PN532_COMMAND_INLISTPASSIVETARGET = 0x4A;
+	private static final byte COMMAND_GET_FW_VERSION = 0x02;
+	private static final byte COMMAND_SAM_CONFIG = 0x14;
+	private static final byte COMMAND_IN_LIST_PASSIVE_TARGET = 0x4A;
 
-	private IPN532Interface medium;
-	private byte[] pn532_packetbuffer;
+	private PN532Interface<T> connection;
+	private byte[] buffer = new byte[64];
 
-	public PN532(IPN532Interface medium) {
-		this.medium = medium;
-		this.pn532_packetbuffer = new byte[64];
+	public int getAckTimeout() {
+		return connection.getAckTimeout();
 	}
 
-	public void begin() throws IOException, InterruptedException {
-		try {
-			medium.begin();
-			medium.wakeup();
-		} catch (UnsupportedBoardType | UnsupportedBusNumberException e) {
-			throw new RuntimeException("Error beginning: " + e.getMessage());
+	public void setAckTimeout(int value) {
+		connection.setAckTimeout(value);
+	}
+
+	public int getReadTimeout() {
+		return connection.getReadTimeout();
+	}
+
+	public void setReadTimeout(int value) {
+		connection.setReadTimeout(value);
+	}
+
+	void setModelName(String value) {
+		connection.setModelName(value);
+	}
+
+	public String getDisplayName() {
+		return connection.getDisplayName();
+	}
+
+	PN532(PN532Interface<T> connection) throws IllegalArgumentException {
+		if (connection == null) {
+			throw new IllegalArgumentException("PN532 constructed with null connection.");
 		}
+
+		this.connection = connection;
 	}
 
-	public long getFirmwareVersion() throws InterruptedException, IllegalStateException, IOException {
+	public void initialize() throws IllegalArgumentException, IllegalStateException, InterruptedException, IOException, UndeclaredThrowableException {
+		log("initialize()");
+		connection.begin();
+		connection.wakeup();
+		log("initialize() successful.");
+	}
+
+	// TODO comment methods, especially for when this returns 0
+	public long getFirmwareVersion() throws IllegalStateException, InterruptedException, IOException {
+		log("getFirmwareVersion()");
+
 		long response;
 
 		byte[] command = new byte[1];
-		command[0] = PN532_COMMAND_GETFIRMWAREVERSION;
+		command[0] = COMMAND_GET_FW_VERSION;
 
-		if (medium.writeCommand(command) != CommandStatus.OK) {
+		if (connection.writeCommand(command) != PN532CommandStatus.OK) {
+			log("getFirmwareVersion() writeCommand failed.");
 			return 0;
 		}
 
-		// read data packet
-		int status = medium.readResponse(pn532_packetbuffer, 12);
+		int status = connection.readResponse(buffer, 12);
 		if (status < 0) {
+			log("getFirmwareVersion() readResponse failed.");
 			return 0;
 		}
 
-		int offset = 0; // medium.getOffsetBytes();
+		response = buffer[0];
+		response <<= 8;
+		response |= buffer[1];
+		response <<= 8;
+		response |= buffer[2];
+		response <<= 8;
+		response |= buffer[3];
 
-		response = pn532_packetbuffer[offset + 0];
-		response <<= 8;
-		response |= pn532_packetbuffer[offset + 1];
-		response <<= 8;
-		response |= pn532_packetbuffer[offset + 2];
-		response <<= 8;
-		response |= pn532_packetbuffer[offset + 3];
-
+		log("getFirmwareVersion() successful.");
 		return response;
 	}
 
-	public boolean SAMConfig() throws InterruptedException, IllegalStateException, IOException {
-		byte[] command = new byte[4];
-		command[0] = PN532_COMMAND_SAMCONFIGURATION;
-		command[1] = 0x01; // normal mode;
-		command[2] = 0x14; // timeout 50ms * 20 = 1 second
-		command[3] = 0x01; // use IRQ pin!
+	public boolean samConfig() throws IllegalStateException, InterruptedException, IOException {
+		log("samConfig()");
 
-		if (medium.writeCommand(command) != CommandStatus.OK) {
+		byte[] command = new byte[4];
+		command[0] = COMMAND_SAM_CONFIG;
+		command[1] = 0x01; // normal mode
+		command[2] = 0x14; // timeout (50ms * 20 = 1s)
+		command[3] = 0x01; // use IRQ pin
+
+		if (connection.writeCommand(command) != PN532CommandStatus.OK) {
+			log("samConfig() writeCommand failed.");
 			return false;
 		}
 
-		return medium.readResponse(pn532_packetbuffer, 8) > 0;
+		int status = connection.readResponse(buffer, 12);
+		if (status < 0) {
+			log("samConfig() readResponse failed.");
+			return false;
+		} else {
+			log("samConfig() successful.");
+			return true;
+		}
 	}
 
-	public int readPassiveTargetID(byte cardbaudrate, byte[] buffer) throws InterruptedException, IllegalStateException, IOException {
+	public int readPassiveTargetId(byte cardBaudRate, byte[] result) throws IllegalStateException, InterruptedException, IOException {
+		log("readPassiveTargetId()");
+
 		byte[] command = new byte[3];
-		command[0] = PN532_COMMAND_INLISTPASSIVETARGET;
-		command[1] = 1; // max 1 cards at once (we can set this to 2 later)
-		command[2] = (byte) cardbaudrate;
+		command[0] = COMMAND_IN_LIST_PASSIVE_TARGET;
+		command[1] = 1; // TODO Max 1 card at a time (can set this to 2 later?)
+		command[2] = (byte) cardBaudRate;
 
-		if (medium.writeCommand(command) != CommandStatus.OK) {
-			return -1; // command failed
-		}
-
-		// read data packet
-		// if (medium.readResponse(pn532_packetbuffer, pn532_packetbuffer.length) < 0) {
-		if (medium.readResponse(pn532_packetbuffer, 20) < 0) {
+		if (connection.writeCommand(command) != PN532CommandStatus.OK) {
+			log("readPassiveTargetId() writeCommand failed.");
 			return -1;
 		}
 
-		// check some basic stuff
+		if (connection.readResponse(buffer, 20) < 0) {
+			log("readPassiveTargetId() readResponse failed.");
+			return -1;
+		}
+
 		/*
 		 * ISO14443A card response should be in the following format:
-		 * 
-		 * byte Description ------------- ------------------------------------------ b0
-		 * Tags Found b1 Tag Number (only one used in this example) b2..3 SENS_RES b4
-		 * SEL_RES b5 NFCID Length b6..NFCIDLen NFCID
+		 *
+		 * byte		Description
+		 * -------- ------------------------------------------
+		 * b0		Tags Found
+		 * b1		Tag Number (only one used in this example)
+		 * b2..3	SENS_RES
+		 * b4		SEL_RES
+		 * b5		NFCID Length
+		 * b6..		NFCIDLen NFCID
 		 */
 
-		int offset = 0; // medium.getOffsetBytes();
-
-		if (pn532_packetbuffer[offset + 0] != 1) {
+		if (buffer[0] != 1) {
+			log("readPassiveTargetId() failed with " + buffer[0] + " tags found.");
 			return -1;
 		}
-		// int sens_res = pn532_packetbuffer[2];
-		// sens_res <<= 8;
-		// sens_res |= pn532_packetbuffer[3];
-
-		// DMSG("ATQA: 0x"); DMSG_HEX(sens_res);
-		// DMSG("SAK: 0x"); DMSG_HEX(pn532_packetbuffer[4]);
-		// DMSG("\n");
 
 		/* Card appears to be Mifare Classic */
-		int uidLength = pn532_packetbuffer[offset + 5];
+		int uidLength = buffer[5];
+
+		// TODO need to check if length is too long?
+		// TODO create Mifare class object?
 
 		for (int i = 0; i < uidLength; i++) {
-			buffer[i] = pn532_packetbuffer[offset + 6 + i];
+			result[i] = buffer[6 + i];
 		}
 
+		log("readPassiveTargetId() returned " + PN532Debug.getByteString(result));
 		return uidLength;
 	}
+	
+	public void close() {
+		connection.close();
+	}
 
-	public static String getByteString(byte[] arr) {
-		String output = "[";
+	void log(String message) {
+		connection.log(message);
+	}
 
-		if (arr != null) {
-			for (int i = 0; i < arr.length; i++) {
-				output += Integer.toHexString(arr[i]) + " ";
-			}
-		}
-		return output.trim() + "]";
+	void logRead(String message) {
+		connection.logRead(message);
+	}
+
+	String prefixMessage(String message) {
+		return connection.prefixMessage(message);
 	}
 }

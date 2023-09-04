@@ -1,266 +1,294 @@
 package mk.hsilomedus.pn532;
 
-import com.pi4j.wiringpi.Gpio;
-import com.pi4j.wiringpi.Spi;
+import java.lang.reflect.UndeclaredThrowableException;
+import java.nio.ByteBuffer;
+import java.util.Arrays;
 
-public class PN532Spi implements IPN532Interface {
+import com.pi4j.io.exception.IOException;
+import com.pi4j.io.gpio.digital.DigitalOutput;
+import com.pi4j.io.gpio.digital.DigitalOutputProvider;
+import com.pi4j.io.spi.Spi;
+import com.pi4j.io.spi.SpiProvider;
 
-	private static final int SPICHANNEL = 1;
-	private static final int SPISPEED = 1000000;
+// TODO Don't know what's up with the whole reset pin thing
+public class PN532Spi extends PN532Interface<Spi> {
 
-	private static final byte PN532_SPI_READY = 0x01;
-	private static final byte PN532_SPI_STATREAD = 0x02;
-	private static final byte PN532_SPI_DATAWRITE = 0x01;
-	private static final byte PN532_SPI_DATAREAD = 0x03;
+	public static final String PROVIDER_DO_PIGPIO = "pigpio-digital-output";
+	public static final String PROVIDER_DO_LINUXFS = "linuxfs-digital-output";
 
-	private static final int OUTPUT = 1;
+	public static final String DEFAULT_PROVIDER = "pigpio-spi";
+	public static final String DEFAULT_PROVIDER_DO = PROVIDER_DO_PIGPIO;
+	public static final int DEFAULT_CHANNEL = 0; // TODO was 1
+	public static final int CS_PIN_CE0 = 8;
+	public static final int CS_PIN_CE1 = 7;
 
-	private static final int LOW = 0;
-	private static final int HIGH = 1;
+	private static final byte SPI_READY = 0x01;
+	private static final byte SPI_DATA_WRITE = 0x01;
+	private static final byte SPI_STATUS_READ = 0x02;
+	private static final byte SPI_DATA_READ = 0x03;
 
-	private static final int _cs = 10;
-	private static final int rst = 0;
+	private String providerDo;
+	private int channel;
+	private int csPin;
 
-	private boolean debug = false;
+	private DigitalOutput csOutput;
 
-	private byte command;
+	/**
+	 * Defaults to {@link PN532Spi#DEFAULT_PROVIDER}, {@link PN532Spi#DEFAULT_PROVIDER_DO},
+	 *  {@link PN532Spi#DEFAULT_CHANNEL}, and {@link PN532Spi#CS_PIN_CE0}.
+	 */
+	public PN532Spi() {
+		this(DEFAULT_PROVIDER, DEFAULT_PROVIDER_DO, DEFAULT_CHANNEL, CS_PIN_CE0);
+	}
+
+	/**
+	 * @param channel The SPI channel to use. Common values are 0 and 1.
+	 * @param csPin The Chip Select Pin to use. Common values are {@link PN532Spi#CS_PIN_CE0}
+	 *  and {@link PN532Spi#CS_PIN_CE1}, but any GPIO can be used.
+	 */
+	public PN532Spi(String provider, String providerDo, int channel, int csPin) {
+		super(provider, "spi-" + channel + "-" + csPin, "SPI " + channel + " " + csPin,
+				"SPI Channel " + channel + ", CS Pin " + csPin);
+
+		this.providerDo = providerDo;
+		this.channel = channel;
+		this.csPin = csPin;
+	}
 
 	@Override
-	public void begin() {
-		log("Beginning SPI.");
+	protected Spi getInterface() throws IllegalArgumentException, UndeclaredThrowableException {
+		DigitalOutputProvider doProvider = pi4j.provider(providerDo);
+		csOutput = doProvider.create(DigitalOutput.newConfigBuilder(pi4j).address(csPin).build());
 
-		int j = Gpio.wiringPiSetup();
-		log("Wiringpisetup is " + j);
-		int fd = Spi.wiringPiSPISetup(SPICHANNEL, SPISPEED);
-		log("Wiringpispisetup is " + fd);
+		var config = Spi.newConfigBuilder(pi4j)
+				.id(id)
+				.name(name)
+				.address(channel)
+				.baud(Spi.DEFAULT_BAUD)
+				.build();
+		SpiProvider spiProvider = pi4j.provider(provider);
+		var spi = spiProvider.create(config);
 
-		if (fd <= -1) {
-			log("SPI Setup failed!");
-			throw new RuntimeException("SPI Setup failed!");
+		// TODO csOutput was created here in Java version
+
+		return spi;
+	}
+
+	@Override
+	protected void wakeupInternal() throws InterruptedException, IOException {
+		// TODO Was high and then low in Java version
+		csLow();
+		csOutput.high();
+	}
+
+	@Override
+	protected void writeCommandInternal(byte[] header, byte[] body) throws InterruptedException, IOException {
+		csLow();
+
+		var buffer = ByteBuffer.allocate(header.length + body.length + 8 + 1); // + 1 for DATAWRITE
+
+		lastCommand = header[0];
+
+		putReverse(buffer, SPI_DATA_WRITE);
+		
+		putReverse(buffer, PN532_PREAMBLE);
+		putReverse(buffer, PN532_STARTCODE1);
+		putReverse(buffer, PN532_STARTCODE2);
+
+		byte length = (byte) (header.length + body.length + 1);
+		putReverse(buffer, length);
+		putReverse(buffer, (byte) (~length + 1));
+
+		putReverse(buffer, PN532_HOSTTOPN532);
+		putReverse(buffer, header);
+		putReverse(buffer, body);
+
+		byte sum = PN532_PREAMBLE + PN532_STARTCODE1 + PN532_STARTCODE2 + PN532_HOSTTOPN532;
+		for (int i = 0; i < header.length; i++) {
+			sum += header[i];
 		}
-		Gpio.pinMode(_cs, OUTPUT);
+		for (int i = 0; i < body.length; i++) {
+			sum += body[i];
+		}
+		putReverse(buffer, (byte) (~sum + 1));
 
+		putReverse(buffer, PN532_POSTAMBLE);
+
+		log("writeCommand() sending " + PN532Debug.getByteString(buffer.array()));
+		io.write(buffer); // Reversed in buffer
+
+		csOutput.high();
 	}
 
 	@Override
-	public void wakeup() {
-		log("Waking SPI.");
-		Gpio.digitalWrite(_cs, HIGH);
-		Gpio.digitalWrite(rst, HIGH);
-		Gpio.digitalWrite(_cs, LOW);
-	}
-
-	@Override
-	public CommandStatus writeCommand(byte[] header, byte[] body) throws InterruptedException {
-
-		log("Medium.writeCommand(" + PN532.getByteString(header) + " " + (body != null ? PN532.getByteString(body) : "")
-				+ ")");
-
-		command = header[0];
-
-		byte checksum;
-		byte cmdlen_1;
-		byte i;
-		byte checksum_1;
-
-		byte cmd_len = (byte) header.length;
-
-		cmd_len++;
-
-		Gpio.digitalWrite(_cs, LOW);
-		Gpio.delay(2);
-
-		writeByte(PN532_SPI_DATAWRITE);
-
-		checksum = PN532_PREAMBLE + PN532_STARTCODE1 + PN532_STARTCODE2;
-		writeByte(PN532_PREAMBLE);
-		writeByte(PN532_STARTCODE1);
-		writeByte(PN532_STARTCODE2);
-
-		writeByte(cmd_len);
-		cmdlen_1 = (byte) (~cmd_len + 1);
-		writeByte(cmdlen_1);
-
-		writeByte(PN532_HOSTTOPN532);
-		checksum += PN532_HOSTTOPN532;
-
-		for (i = 0; i < cmd_len - 1; i++) {
-			writeByte(header[i]);
-			checksum += header[i];
+	protected int readResponseInternal(byte[] buffer, int expectedLength, int timeout) throws InterruptedException, IOException {
+		if (!waitForReady(timeout)) {
+			logRead("readResponse() timed out.");
+			return PN532_TIMEOUT;
 		}
 
-		checksum_1 = (byte) ~checksum;
-		writeByte(checksum_1);
-		writeByte(PN532_POSTAMBLE);
-		Gpio.digitalWrite(_cs, HIGH);
+		csLow();
 
-		return waitForAck(1000);
-	}
+		writeByte(SPI_DATA_READ);
 
-	@Override
-	public CommandStatus writeCommand(byte[] header) throws InterruptedException {
-		return writeCommand(header, null);
-	}
-
-	@Override
-	public int readResponse(byte[] buffer, int expectedLength, int timeout) throws InterruptedException {
-		log("Medium.readResponse(..., " + expectedLength + ", " + timeout + ")");
-
-		Gpio.digitalWrite(_cs, LOW);
-		Gpio.delay(2);
-		writeByte(PN532_SPI_DATAREAD);
-
-		if (PN532_PREAMBLE != readByte() || PN532_STARTCODE1 != readByte() || PN532_STARTCODE2 != readByte()) {
-			log("pn532i2c.readResponse bad starting bytes found");
-			return -1;
+		if (readByte() != PN532_PREAMBLE || readByte() != PN532_STARTCODE1 || readByte() != PN532_STARTCODE2) {
+			logRead("readResponse() received bad starting bytes.");
+			return PN532_INVALID_FRAME;
 		}
 
 		byte length = readByte();
-		byte com_length = length;
-		com_length += readByte();
-		if (com_length != 0) {
-			log("pn532i2c.readResponse bad length checksum");
-			return -1;
+
+		byte lengthCheck = (byte) (length + readByte());
+		if (lengthCheck != 0) {
+			logRead("readResponse() received bad length checksum.");
+			return PN532_INVALID_FRAME;
 		}
 
-		byte cmd = 1;
-		cmd += command;
-
-		if (PN532_PN532TOHOST != readByte() || (cmd) != readByte()) {
-			log("pn532i2c.readResponse bad command check.");
-			return -1;
+		byte command = (byte) (lastCommand + 1);
+		if (readByte() != PN532_PN532TOHOST || readByte() != command) {
+			logRead("readResponse() received bad command.");
+			return PN532_INVALID_FRAME;
 		}
 
 		length -= 2;
 		if (length > expectedLength) {
-			log("pn532i2c.readResponse not enough space");
-			readByte();
-			readByte();
-			return -1;
+			for (int i = 0; i < length + 2; i++) {
+				readByte(); // Dump message
+			}
+			
+			logRead("readResponse() received length greater than expectedLength.");
+			return PN532_NO_SPACE;
 		}
 
 		byte sum = PN532_PN532TOHOST;
-		sum += cmd;
+		sum += command;
 
 		for (int i = 0; i < length; i++) {
 			buffer[i] = readByte();
 			sum += buffer[i];
 		}
 
-		byte checksum = readByte();
-		checksum += sum;
-		if (0 != checksum) {
-			log("pn532i2c.readResponse bad checksum");
-			return -1;
+		byte check = (byte) (sum + readByte());
+		if (check != 0) {
+			logRead("readResponse() received bad checksum.");
+			return PN532_INVALID_FRAME;
 		}
 
-		readByte(); // POSTAMBLE
+		if (readByte() != PN532_POSTAMBLE) {
+			logRead("readResponse() received bad postamble.");
+			return PN532_INVALID_FRAME;
+		}
 
-		Gpio.digitalWrite(_cs, HIGH);
+		csOutput.high();
 
+		logRead("readResponse() returned " + length + " bytes: " + PN532Debug.getByteString(buffer));
 		return length;
 	}
 
 	@Override
-	public int readResponse(byte[] buffer, int expectedLength) throws InterruptedException {
-		return readResponse(buffer, expectedLength, 1000);
+	void close() {
+		log("close()");
+		if (io != null && io.isOpen()) {
+			io.close();
+		}
+		log("close() successful.");
 	}
 
-	private CommandStatus waitForAck(int timeout) throws InterruptedException {
-		log("Medium.waitForAck()");
+	@Override
+	protected PN532CommandStatus readAckFrame() throws InterruptedException, IOException {
+		if (!waitForReady(ackTimeout)) {
+			log("readAckFrame() timed out.");
+			return PN532CommandStatus.TIMEOUT;
+		}
 
-		int timer = 0;
-		while (readSpiStatus() != PN532_SPI_READY) {
-			if (timeout != 0) {
-				timer += 10;
-				if (timer > timeout) {
-					return CommandStatus.TIMEOUT;
+		byte[] buffer = new byte[PN532_ACK.length];
+		for (int i = 0; i < buffer.length; i++) {
+			buffer[i] = readByte();
+		}
+
+		csOutput.high();
+
+		if (!Arrays.equals(buffer, PN532_ACK)) {
+			log("readAckFrame() was invalid.");
+			return PN532CommandStatus.INVALID;
+		}
+
+		log("readAckFrame() successful.");
+		return PN532CommandStatus.OK;
+	}
+
+	// There was a 1-2ms delay in every place but one in the original C++ code, so why not
+	private void csLow() throws InterruptedException, IOException {
+		csOutput.low();
+		Thread.sleep(2);
+	}
+
+	private boolean waitForReady(int timeout) throws InterruptedException, IOException {
+		long end = System.currentTimeMillis() + timeout;
+		while (true) {
+			if (!isReady()) {
+				Thread.sleep(10);
+				if (System.currentTimeMillis() > end) {
+					return false;
 				}
-			}
-			Gpio.delay(10);
-		}
-		if (!checkSpiAck()) {
-			return CommandStatus.INVALID_ACK;
-		}
-
-		timer = 0;
-		while (readSpiStatus() != PN532_SPI_READY) {
-			if (timeout != 0) {
-				timer += 10;
-				if (timer > timeout) {
-					return CommandStatus.TIMEOUT;
-				}
-			}
-			Gpio.delay(10);
-		}
-		return CommandStatus.OK;
-	}
-	//
-	// @Override
-	// public int getOffsetBytes() {
-	// return 7;
-	// }
-
-	private byte readSpiStatus() throws InterruptedException {
-		log("Medium.readSpiStatus()");
-		byte status;
-
-		Gpio.digitalWrite(_cs, LOW);
-		Gpio.delay(2);
-		writeByte(PN532_SPI_STATREAD);
-		status = readByte();
-		Gpio.digitalWrite(_cs, HIGH);
-		return status;
-	}
-
-	private boolean checkSpiAck() throws InterruptedException {
-		log("Medium.checkSpiAck()");
-		byte ackbuff[] = new byte[6];
-		byte PN532_ACK[] = new byte[] { 0, 0, (byte) 0xFF, 0, (byte) 0xFF, 0 };
-
-		readResponse(ackbuff, 6);
-		for (int i = 0; i < ackbuff.length; i++) {
-			if (ackbuff[i] != PN532_ACK[i]) {
-				return false;
+			} else {
+				return true;
 			}
 		}
-		return true;
 	}
 
-	private void writeByte(byte byteToWrite) {
-		// System.out.println("Medium.write(" + Integer.toHexString(_data) +
-		// ")");
-		byte[] dataToSend = new byte[1];
-		dataToSend[0] = reverseByte(byteToWrite);
-		Spi.wiringPiSPIDataRW(SPICHANNEL, dataToSend, 1);
+	private boolean isReady() throws InterruptedException, IOException {
+		csLow();
+		writeByte(SPI_STATUS_READ, true);
+		boolean result = readByte() == SPI_READY;
+		csOutput.high();
+
+		return result;
 	}
 
-	private byte readByte() {
-		Gpio.delay(1);
-		byte[] data = new byte[1];
-		data[0] = 0;
-		Spi.wiringPiSPIDataRW(SPICHANNEL, data, 1);
-		data[0] = reverseByte(data[0]);
-		// System.out.println("Medium.readF() = " +
-		// Integer.toHexString(data[0]));
-		return data[0];
+	private void writeByte(byte value, boolean logRead) throws IOException {
+		if (logRead) {
+			logRead("writeByte() wrote " + String.format("%02X", value));
+		} else {
+			log("writeByte() wrote " + String.format("%02X", value));
+		}
+		
+		io.write(reverse(value)); // Reversed
+	}
+	
+	private void writeByte(byte value) throws IOException {
+		writeByte(value, false);
 	}
 
-	private byte reverseByte(byte inputByte) {
-		byte input = inputByte;
+	private byte readByte() throws IOException {
+		//Thread.sleep(1); // Only in Java
+		
+		byte value = reverse(io.readByte()); // Reversed
+		logRead("readByte() read " + String.format("%02X", value));
+		return value;
+	}
+
+	private static void putReverse(ByteBuffer buffer, byte value) {
+		buffer.put(reverse(value));
+	}
+
+	private static void putReverse(ByteBuffer buffer, byte[] values) {
+		for (int i = 0; i < values.length; i++) {
+			putReverse(buffer, values[i]);
+		}
+	}
+
+	// TODO From the Java version, should try to understand and maybe optimize this
+	private static byte reverse(byte input) {
 		byte output = 0;
+
 		for (int p = 0; p < 8; p++) {
 			if ((input & 0x01) > 0) {
 				output |= 1 << (7 - p);
 			}
 			input = (byte) (input >> 1);
 		}
-		return output;
-	}
 
-	private void log(String message) {
-		if (debug) {
-			System.out.println(message);
-		}
+		return output;
 	}
 }
