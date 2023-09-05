@@ -20,7 +20,7 @@ class MainListener implements PN532SamThreadListener {
 	}
 
 	@Override
-	public void uidReceived(String displayName, String uid) {
-		System.out.println(displayName + ": UID '" + uid + "' received.");
+	public void uidReceived(String displayName, byte[] uid) {
+		System.out.println(displayName + ": UID '" + PN532SamThreadListener.getUidString(uid) + "' received.");
 	}
 }

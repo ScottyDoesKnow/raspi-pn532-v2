@@ -2,44 +2,29 @@ package mk.hsilomedus.pn532;
 
 public class PN532Debug {
 
-	private static boolean log = false;
-	private static boolean logRead = false;
+	private static boolean loggingEnabled = false;
 
-	public static boolean getLog() {
-		return log;
+	public static boolean getLoggingEnabled() {
+		return loggingEnabled;
 	}
 
-	public static void setLog(boolean value) {
-		log = value;
+	public static void setLoggingEnabled(boolean value) {
+		loggingEnabled = value;
 	}
 
-	public static boolean getLogRead() {
-		return logRead;
-	}
-
-	public static void setLogRead(boolean value) {
-		logRead = value;
-	}
-
-	static void log(String message) {
-		if (log) {
+	public static void log(String message) {
+		if (loggingEnabled) {
 			System.out.println(message);
 		}
 	}
 
-	static void logRead(String message) {
-		if (logRead) {
-			System.out.println(message);
-		}
-	}
-
-	public static String getByteString(byte[] bytes) {
+	public static String getByteHexString(byte[] bytes, int length) {
 		StringBuilder output = new StringBuilder();
 		output.append('[');
 
 		if (bytes != null) {
 			boolean first = true;
-			for (int i = 0; i < bytes.length; i++) {
+			for (int i = 0; i < length; i++) {
 				if (!first) {
 					output.append(' ');
 				}
@@ -51,5 +36,9 @@ public class PN532Debug {
 
 		output.append(']');
 		return output.toString();
+	}
+
+	public static String getByteHexString(byte[] bytes) {
+		return getByteHexString(bytes, bytes.length);
 	}
 }
