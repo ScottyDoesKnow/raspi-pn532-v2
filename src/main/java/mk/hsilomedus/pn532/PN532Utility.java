@@ -23,13 +23,13 @@ public class PN532Utility {
 
 	public static void log(String message) {
 		if (logger != null) {
-			logger.log(Level.INFO, () -> DATE_FORMAT.get().format(new Date()) + " " + message + System.lineSeparator());
+			logger.log(Level.FINE, () -> DATE_FORMAT.get().format(new Date()) + " " + message + System.lineSeparator());
 		}
 	}
 
 	public static void log(Supplier<String> message) {
 		if (logger != null) {
-			logger.log(Level.INFO, () -> DATE_FORMAT.get().format(new Date()) + " " + message.get() + System.lineSeparator());
+			logger.log(Level.FINE, () -> DATE_FORMAT.get().format(new Date()) + " " + message.get() + System.lineSeparator());
 		}
 	}
 
