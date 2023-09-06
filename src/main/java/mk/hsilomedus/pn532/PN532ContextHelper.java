@@ -6,8 +6,12 @@ import com.pi4j.context.Context;
 public class PN532ContextHelper {
 
 	// Synchronization could be done more efficiently but I don't think it matters
-	private static volatile Context context;
+	private static Context context;
 	static final Object mutex = new Object();
+
+	private PN532ContextHelper() {
+		throw new UnsupportedOperationException("Utility class.");
+	}
 
 	/**
 	 * Initializes the Pi4J {@link Context}. Must be called and must be called only once.

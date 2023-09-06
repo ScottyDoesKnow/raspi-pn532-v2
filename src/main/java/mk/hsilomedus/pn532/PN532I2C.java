@@ -58,13 +58,13 @@ public class PN532I2C extends PN532Interface<I2C> {
 
 	@Override
 	protected boolean readFully(byte[] buffer, int timeout) throws InterruptedException, IOException {
-		byte[] bufferTemp = new byte[buffer.length + 1];
+		var bufferTemp = new byte[buffer.length + 1];
 
 		long end = System.currentTimeMillis() + timeout;
 		while (true) {
 			if (io.read(bufferTemp, bufferTemp.length) == bufferTemp.length && (bufferTemp[0] & 1) != 0) {
 				System.arraycopy(bufferTemp, 1, buffer, 0, buffer.length);
-				log("readFully() received " + buffer.length + " bytes: " + PN532Debug.getByteHexString(buffer));
+				log("readFully() received " + buffer.length + " bytes: %s", () -> PN532Utility.getByteHexString(buffer));
 				return true;
 			}
 

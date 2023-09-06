@@ -11,7 +11,7 @@ import com.pi4j.io.serial.SerialProvider;
 public class PN532Serial extends PN532Interface<Serial> {
 
 	public static final String DEFAULT_PROVIDER = "pigpio-serial";
-	public static final String DEFAULT_DEVICE = "/dev/ttyAMA0"; // TODO failed: /dev/ttyAMA0 /dev/serial0, crashed: /dev/serial1 /dev/ttyS0
+	public static final String DEFAULT_DEVICE = "/dev/ttyAMA0"; // TODO /dev/serial0 https://raspberrypi.stackexchange.com/a/45571
 
 	private static final byte[] WAKUEP = new byte[] { 0x55, 0x55, 0, 0, 0 };
 
@@ -55,17 +55,18 @@ public class PN532Serial extends PN532Interface<Serial> {
 
 	@Override
 	protected boolean readFully(byte[] buffer, int timeout) throws InterruptedException, IOException {
-		int readTotal = 0;
+		var readTotal = 0;
 
 		long end = System.currentTimeMillis() + timeout;
 		while (true) {
 			int available = io.available();
 			if (available > 0) {
-				int toRead = Math.min(available, buffer.length - readTotal);
-				int read = io.read(buffer, readTotal, toRead);
+				var toRead = Math.min(available, buffer.length - readTotal);
+				var read = io.read(buffer, readTotal, toRead);
 
 				if (read > 0) {
-					log("readFully() has so far received " + readTotal + " bytes: " + PN532Debug.getByteHexString(buffer, readTotal));
+					final int readTotalFinal = readTotal;
+					log("readFully() has so far received " + readTotal + " bytes: %s", () -> PN532Utility.getByteHexString(buffer, readTotalFinal));
 
 					readTotal += read;
 					if (readTotal >= buffer.length) { // Shouldn't happen, but >= for safety

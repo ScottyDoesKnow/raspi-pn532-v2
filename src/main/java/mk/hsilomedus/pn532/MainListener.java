@@ -15,7 +15,7 @@ class MainListener implements PN532SamThreadListener {
 	}
 
 	@Override
-	public void println(String message) {
+	public void receiveMessage(String message) {
 		System.out.println(message);
 	}
 

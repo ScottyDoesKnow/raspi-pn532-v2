@@ -1,11 +1,12 @@
 package mk.hsilomedus.pn532;
 
 import java.lang.reflect.UndeclaredThrowableException;
+import java.util.function.Supplier;
 
 import com.pi4j.io.IO;
 import com.pi4j.io.exception.IOException;
 
-public class PN532<T extends IO<T, ?, ?>> {
+public class PN532<T extends IO<T, ?, ?>> implements AutoCloseable {
 
 	private static final byte COMMAND_GET_FW_VERSION = 0x02;
 	private static final byte COMMAND_SAM_CONFIG = 0x14;
@@ -55,7 +56,7 @@ public class PN532<T extends IO<T, ?, ?>> {
 
 		long response;
 
-		byte[] command = new byte[1];
+		var command = new byte[1];
 		command[0] = COMMAND_GET_FW_VERSION;
 
 		var writeStatus = connection.writeCommand(command);
@@ -93,7 +94,7 @@ public class PN532<T extends IO<T, ?, ?>> {
 	public boolean samConfig() throws IllegalStateException, InterruptedException, IOException {
 		log("samConfig()");
 
-		byte[] command = new byte[4];
+		var command = new byte[4];
 		command[0] = COMMAND_SAM_CONFIG;
 		command[1] = 0x01; // normal mode
 		command[2] = 0x14; // timeout (50ms * 20 = 1s)
@@ -118,7 +119,7 @@ public class PN532<T extends IO<T, ?, ?>> {
 	public int readPassiveTargetId(byte cardBaudRate, byte[] result) throws IllegalStateException, InterruptedException, IOException {
 		log("readPassiveTargetId()");
 
-		byte[] command = new byte[3];
+		var command = new byte[3];
 		command[0] = COMMAND_IN_LIST_PASSIVE_TARGET;
 		command[1] = 1; // max 1 cards at once (we can set this to 2 later) - comment from C++ code
 		command[2] = cardBaudRate;
@@ -159,11 +160,11 @@ public class PN532<T extends IO<T, ?, ?>> {
 		// TODO need to check if length is too long, and also if my buffer is too small?
 		// TODO create Mifare class object?
 
-		for (int i = 0; i < uidLength; i++) {
+		for (var i = 0; i < uidLength; i++) {
 			result[i] = buffer[6 + i];
 		}
 
-		log("readPassiveTargetId() returned " + PN532Debug.getByteHexString(result));
+		log("readPassiveTargetId() returned %s", () -> PN532Utility.getByteHexString(result));
 		return uidLength;
 	}
 
@@ -171,11 +172,15 @@ public class PN532<T extends IO<T, ?, ?>> {
 		connection.close();
 	}
 
-	void log(String message) {
+	String prefixMessage(String message) {
+		return connection.prefixMessage(message);
+	}
+
+	private void log(String message) {
 		connection.log(message);
 	}
 
-	String prefixMessage(String message) {
-		return connection.prefixMessage(message);
+	private void log(String message, Supplier<String> arg1) {
+		connection.log(message, arg1);
 	}
 }

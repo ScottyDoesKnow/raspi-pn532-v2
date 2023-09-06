@@ -8,16 +8,16 @@ enum PN532TransferResult {
 	INVALID_FRAME(-4),
 	INVALID_FW_VERSION(-5),
 	INSUFFICIENT_SPACE(-6);
-	
+
 	private static final PN532TransferResult[] VALUES = values();
-	
+
 	public static PN532TransferResult fromValue(int value) {
-		for (int i = 0; i < VALUES.length; i++) {
+		for (var i = 0; i < VALUES.length; i++) {
 			if (VALUES[i].getValue() == value) {
 				return VALUES[i];
 			}
 		}
-		
+
 		return UNDEFINED;
 	}
 

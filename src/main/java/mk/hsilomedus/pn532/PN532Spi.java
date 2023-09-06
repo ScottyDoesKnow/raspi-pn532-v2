@@ -82,7 +82,7 @@ public class PN532Spi extends PN532Interface<Spi> {
 
 	@Override
 	protected boolean readFully(byte[] buffer, int timeout) throws InterruptedException, IOException {
-		int readTotal = 0;
+		var readTotal = 0;
 
 		long end = System.currentTimeMillis() + timeout;
 		while (true) {
@@ -97,10 +97,11 @@ public class PN532Spi extends PN532Interface<Spi> {
 
 				try {
 					while (true) {
-						int read = io.read(buffer, readTotal, buffer.length - readTotal); // Processed in finally
+						var read = io.read(buffer, readTotal, buffer.length - readTotal); // Processed in finally
 
 						if (read > 0) {
-							log("readFully() has so far received " + readTotal + " (reversed) bytes: " + PN532Debug.getByteHexString(buffer, readTotal));
+							final int readTotalFinal = readTotal;
+							log("readFully() has so far received " + readTotal + " (reversed) bytes: %s", () -> PN532Utility.getByteHexString(buffer, readTotalFinal));
 
 							readTotal += read;
 							if (readTotal >= buffer.length) { // Shouldn't happen, but >= for safety
@@ -149,7 +150,7 @@ public class PN532Spi extends PN532Interface<Spi> {
 		io.close();
 	}
 
-	private boolean isReady() throws InterruptedException, IOException {
+	private boolean isReady() throws IOException {
 		csOutput.low(); // No delay in C++ code, so not calling csLow()
 		writeByte(SPI_STATUS_READ, false); // Not logged because isReady() spams too much
 
@@ -177,9 +178,9 @@ public class PN532Spi extends PN532Interface<Spi> {
 	private byte reverseByte(byte value) {
 		byte result = 0;
 
-		for (int p = 0; p < 8; p++) {
+		for (var i = 0; i < 8; i++) {
 			if ((value & 0x01) > 0) {
-				result |= 1 << (7 - p);
+				result |= 1 << (7 - i);
 			}
 			value = (byte) (value >> 1);
 		}
@@ -188,7 +189,7 @@ public class PN532Spi extends PN532Interface<Spi> {
 	}
 
 	private void reverseBytes(byte[] values) {
-		for (int i = 0; i < values.length; i++) {
+		for (var i = 0; i < values.length; i++) {
 			reverseByte(values[i]);
 		}
 	}
