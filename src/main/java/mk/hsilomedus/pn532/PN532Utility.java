@@ -1,5 +1,7 @@
 package mk.hsilomedus.pn532;
 
+import java.io.IOException;
+import java.lang.reflect.UndeclaredThrowableException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -7,7 +9,9 @@ import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public class PN532Utility {
+import com.pi4j.provider.exception.ProviderNotFoundException;
+
+public final class PN532Utility {
 
 	private static final ThreadLocal<DateFormat> DATE_FORMAT = ThreadLocal.withInitial(() -> new SimpleDateFormat("yyyy/MM/dd HH:mm:ss.SSS"));
 
@@ -65,7 +69,42 @@ public class PN532Utility {
 		return getByteHexString(bytes, bytes.length);
 	}
 
-	public static String getNestedMessage(Throwable throwable) {
+	public static void wrapInitializationExceptions(Runnable runnable) throws IOException {
+		try {
+			runnable.run();
+		} catch (IllegalArgumentException | ProviderNotFoundException e) { // Handle pi4j/pigpio nonsense
+			throw PN532Utility.getCheckedIoException(e);
+		} catch (UndeclaredThrowableException e) { // Handle pigpio nonsense
+			throw PN532Utility.getCheckedIoException(e, true);
+		}
+	}
+
+	public static void wrapIoException(Runnable runnable) throws IOException {
+		try {
+			runnable.run();
+		} catch (com.pi4j.io.exception.IOException e) {
+			throw getCheckedIoException(e);
+		}
+	}
+
+	public static <T> T wrapIoExceptionInterruptable(InterruptableRunnable<T> runnable) throws InterruptedException, IOException {
+		try {
+			return runnable.run();
+		} catch (com.pi4j.io.exception.IOException e) {
+			throw getCheckedIoException(e);
+		}
+	}
+
+	private static IOException getCheckedIoException(Throwable e, boolean getNestedMessage) {
+		var message = getNestedMessage ? getNestedMessage(e) : e.getMessage();
+		return new IOException(message, e);
+	}
+
+	private static IOException getCheckedIoException(Throwable e) {
+		return getCheckedIoException(e, false);
+	}
+
+	private static String getNestedMessage(Throwable throwable) {
 		// Decided to stop at first throwable with a message rather than the deepest cause
 		if (throwable.getMessage() == null && throwable.getCause() != null) {
 			var cause = throwable.getCause();
@@ -76,5 +115,10 @@ public class PN532Utility {
 		} else {
 			return throwable.getMessage();
 		}
+	}
+
+	@FunctionalInterface
+	public interface InterruptableRunnable<T> {
+		T run() throws InterruptedException;
 	}
 }

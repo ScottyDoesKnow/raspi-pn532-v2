@@ -1,6 +1,5 @@
 package mk.hsilomedus.pn532;
 
-import java.lang.reflect.UndeclaredThrowableException;
 import java.nio.ByteBuffer;
 
 import com.pi4j.io.exception.IOException;
@@ -43,7 +42,7 @@ public class PN532Spi extends PN532Interface<Spi> {
 	/**
 	 * @param channel The SPI channel to use. Common values are 0 and 1.
 	 * @param csPin The Chip Select Pin to use. Common values are {@link PN532Spi#CS_PIN_CE0}
-	 *  and {@link PN532Spi#CS_PIN_CE1}, but any GPIO can be used.
+	 *     and {@link PN532Spi#CS_PIN_CE1}, but any GPIO can be used.
 	 */
 	public PN532Spi(String provider, String providerDo, int channel, int csPin) {
 		super(provider, "spi-" + channel + "-" + csPin, "SPI " + channel + " " + csPin,
@@ -55,7 +54,7 @@ public class PN532Spi extends PN532Interface<Spi> {
 	}
 
 	@Override
-	protected Spi getInterface() throws IllegalArgumentException, UndeclaredThrowableException {
+	protected Spi getInterface() {
 		DigitalOutputProvider doProvider = pi4j.provider(providerDo);
 		csOutput = doProvider.create(DigitalOutput.newConfigBuilder(pi4j).address(csPin).build());
 
@@ -84,7 +83,7 @@ public class PN532Spi extends PN532Interface<Spi> {
 	protected boolean readFully(byte[] buffer, int timeout) throws InterruptedException, IOException {
 		var readTotal = 0;
 
-		long end = System.currentTimeMillis() + timeout;
+		var end = System.currentTimeMillis() + timeout;
 		while (true) {
 			if (!isReady()) {
 				Thread.sleep(10);
@@ -100,7 +99,7 @@ public class PN532Spi extends PN532Interface<Spi> {
 						var read = io.read(buffer, readTotal, buffer.length - readTotal); // Processed in finally
 
 						if (read > 0) {
-							final int readTotalFinal = readTotal;
+							final var readTotalFinal = readTotal;
 							log("readFully() has so far received " + readTotal + " (reversed) bytes: %s", () -> PN532Utility.getByteHexString(buffer, readTotalFinal));
 
 							readTotal += read;
@@ -135,7 +134,7 @@ public class PN532Spi extends PN532Interface<Spi> {
 
 	@Override
 	protected void ioWrite(ByteBuffer buffer) throws IOException {
-		byte[] bufferArray = buffer.array();
+		var bufferArray = buffer.array();
 		reverseBytes(bufferArray);
 		io.write(buffer);
 	}
@@ -154,7 +153,7 @@ public class PN532Spi extends PN532Interface<Spi> {
 		csOutput.low(); // No delay in C++ code, so not calling csLow()
 		writeByte(SPI_STATUS_READ, false); // Not logged because isReady() spams too much
 
-		boolean result = reverseByte(io.readByte()) == SPI_READY;
+		var result = reverseByte(io.readByte()) == SPI_READY;
 		csOutput.high();
 
 		return result;
@@ -176,21 +175,22 @@ public class PN532Spi extends PN532Interface<Spi> {
 
 	// TODO From the Java code, should try to understand and maybe optimize this
 	private byte reverseByte(byte value) {
-		byte result = 0;
+		var input = value;
+		byte output = 0;
 
 		for (var i = 0; i < 8; i++) {
-			if ((value & 0x01) > 0) {
-				result |= 1 << (7 - i);
+			if ((input & 0x01) > 0) {
+				output |= 1 << (7 - i);
 			}
-			value = (byte) (value >> 1);
+			input = (byte) (input >> 1);
 		}
 
-		return result;
+		return output;
 	}
 
 	private void reverseBytes(byte[] values) {
 		for (var i = 0; i < values.length; i++) {
-			reverseByte(values[i]);
+			values[i] = reverseByte(values[i]);
 		}
 	}
 }

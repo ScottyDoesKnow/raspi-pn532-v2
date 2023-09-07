@@ -1,10 +1,9 @@
 package mk.hsilomedus.pn532;
 
-import java.lang.reflect.UndeclaredThrowableException;
+import java.io.IOException;
 import java.util.function.Supplier;
 
 import com.pi4j.io.IO;
-import com.pi4j.io.exception.IOException;
 
 public class PN532<T extends IO<T, ?, ?>> implements AutoCloseable {
 
@@ -35,7 +34,7 @@ public class PN532<T extends IO<T, ?, ?>> implements AutoCloseable {
 		return connection.getDisplayName();
 	}
 
-	public PN532(PN532Interface<T> connection) throws IllegalArgumentException {
+	public PN532(PN532Interface<T> connection) {
 		if (connection == null) {
 			throw new IllegalArgumentException("PN532 constructed with null connection.");
 		}
@@ -43,7 +42,7 @@ public class PN532<T extends IO<T, ?, ?>> implements AutoCloseable {
 		this.connection = connection;
 	}
 
-	public void initialize() throws IllegalArgumentException, IllegalStateException, InterruptedException, IOException, UndeclaredThrowableException {
+	public void initialize() throws InterruptedException, IOException {
 		log("initialize()");
 		connection.begin();
 		connection.wakeup();
@@ -51,10 +50,8 @@ public class PN532<T extends IO<T, ?, ?>> implements AutoCloseable {
 	}
 
 	// TODO comment public methods, especially return values of this and readResponse
-	public long getFirmwareVersion() throws IllegalStateException, InterruptedException, IOException {
+	public long getFirmwareVersion() throws InterruptedException, IOException {
 		log("getFirmwareVersion()");
-
-		long response;
 
 		var command = new byte[1];
 		command[0] = COMMAND_GET_FW_VERSION;
@@ -65,19 +62,19 @@ public class PN532<T extends IO<T, ?, ?>> implements AutoCloseable {
 			return writeStatus.getValue();
 		}
 
-		int responseStatus = connection.readResponse(buffer, 12);
+		var responseStatus = connection.readResponse(buffer, 12);
 		if (responseStatus < 0) {
 			log("getFirmwareVersion() readResponse returned " + PN532TransferResult.fromValue(responseStatus));
 			return responseStatus;
 		}
 
-		response = buffer[0];
+		long response = buffer[0];
 		response <<= 8;
-		response |= buffer[1];
+		response |= (buffer[1] & 0xff); // '& 0xff' to deal with sign extension
 		response <<= 8;
-		response |= buffer[2];
+		response |= (buffer[2] & 0xff);
 		response <<= 8;
-		response |= buffer[3];
+		response |= (buffer[3] & 0xff);
 
 		if (response == 0) {
 			log("getFirmwareVersion() read 0.");
@@ -91,7 +88,7 @@ public class PN532<T extends IO<T, ?, ?>> implements AutoCloseable {
 		return response;
 	}
 
-	public boolean samConfig() throws IllegalStateException, InterruptedException, IOException {
+	public boolean samConfig() throws InterruptedException, IOException {
 		log("samConfig()");
 
 		var command = new byte[4];
@@ -106,7 +103,7 @@ public class PN532<T extends IO<T, ?, ?>> implements AutoCloseable {
 			return false;
 		}
 
-		int responseStatus = connection.readResponse(buffer, 12);
+		var responseStatus = connection.readResponse(buffer, 12);
 		if (responseStatus < 0) {
 			log("samConfig() readResponse returned " + PN532TransferResult.fromValue(responseStatus));
 			return false;
@@ -116,7 +113,7 @@ public class PN532<T extends IO<T, ?, ?>> implements AutoCloseable {
 		}
 	}
 
-	public int readPassiveTargetId(byte cardBaudRate, byte[] result) throws IllegalStateException, InterruptedException, IOException {
+	public int readPassiveTargetId(byte cardBaudRate, byte[] result) throws InterruptedException, IOException {
 		log("readPassiveTargetId()");
 
 		var command = new byte[3];
@@ -130,7 +127,7 @@ public class PN532<T extends IO<T, ?, ?>> implements AutoCloseable {
 			return writeStatus.getValue();
 		}
 
-		int responseStatus = connection.readResponse(buffer, 20);
+		var responseStatus = connection.readResponse(buffer, 20);
 		if (responseStatus < 0) {
 			log("readPassiveTargetId() readResponse returned " + PN532TransferResult.fromValue(responseStatus));
 			return responseStatus;
@@ -139,14 +136,14 @@ public class PN532<T extends IO<T, ?, ?>> implements AutoCloseable {
 		/*
 		 * ISO14443A card response should be in the following format:
 		 *
-		 * byte		Description
-		 * -------- ------------------------------------------
-		 * b0		Tags Found
-		 * b1		Tag Number (only one used in this example)
-		 * b2..3	SENS_RES
-		 * b4		SEL_RES
-		 * b5		NFCID Length
-		 * b6..		NFCIDLen NFCID
+		 * byte    Description
+		 * ------- ------------------------------------------
+		 * b0      Tags Found
+		 * b1      Tag Number (only one used in this example)
+		 * b2..3   SENS_RES
+		 * b4      SEL_RES
+		 * b5      NFCID Length
+		 * b6..    NFCIDLen NFCID
 		 */
 
 		if (buffer[0] != 1) {
@@ -168,6 +165,7 @@ public class PN532<T extends IO<T, ?, ?>> implements AutoCloseable {
 		return uidLength;
 	}
 
+	@Override
 	public void close() {
 		connection.close();
 	}

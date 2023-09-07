@@ -1,13 +1,12 @@
 package mk.hsilomedus.pn532;
 
-import java.lang.reflect.UndeclaredThrowableException;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.function.Supplier;
 
 import com.pi4j.context.Context;
 import com.pi4j.io.IO;
-import com.pi4j.io.exception.IOException;
 
 // Don't know how to do this without the ?
 public abstract class PN532Interface<T extends IO<T, ?, ?>> {
@@ -15,26 +14,26 @@ public abstract class PN532Interface<T extends IO<T, ?, ?>> {
 	public static final int DEFAULT_ACK_TIMEOUT = 1000;
 	public static final int DEFAULT_READ_TIMEOUT = 1000;
 
-	protected static final byte PREAMBLE = 0x00;
-	protected static final byte START_CODE_1 = 0x00;
-	protected static final byte START_CODE_2 = (byte) 0xFF;
-	protected static final byte POSTAMBLE = 0x00;
+	private static final byte PREAMBLE = 0x00;
+	private static final byte START_CODE_1 = 0x00;
+	private static final byte START_CODE_2 = (byte) 0xFF;
+	private static final byte POSTAMBLE = 0x00;
 
-	protected static final byte HOST_TO_PN532 = (byte) 0xD4;
-	protected static final byte PN532_TO_HOST = (byte) 0xD5;
+	private static final byte HOST_TO_PN532 = (byte) 0xD4;
+	private static final byte PN532_TO_HOST = (byte) 0xD5;
 
-	protected static final byte[] PN532_ACK = new byte[] { 0, 0, (byte) 0xFF, 0, (byte) 0xFF, 0 };
+	private static final byte[] PN532_ACK = { 0, 0, (byte) 0xFF, 0, (byte) 0xFF, 0 };
 
-	protected int ackTimeout = DEFAULT_ACK_TIMEOUT;
-	protected int readTimeout = DEFAULT_READ_TIMEOUT;
+	private int ackTimeout = DEFAULT_ACK_TIMEOUT;
+	private int readTimeout = DEFAULT_READ_TIMEOUT;
 
 	protected final String provider;
 	protected final String id;
 	protected final String name;
-	protected final String displaySuffix;
+	private final String displaySuffix;
 
-	protected String modelName = "PN5xx";
-	protected String firmwareVersion = "";
+	private String modelName = "PN5xx";
+	private String firmwareVersion = "";
 
 	protected Context pi4j = null;
 	protected T io; // WARNING: If you use this to read or write directly, SPI won't work correctly since it reverses the bytes
@@ -75,7 +74,7 @@ public abstract class PN532Interface<T extends IO<T, ?, ?>> {
 		this.displaySuffix = displaySuffix;
 	}
 
-	public void begin() throws IllegalArgumentException, IllegalStateException, UndeclaredThrowableException {
+	public void begin() throws IOException {
 		synchronized (PN532ContextHelper.mutex) { // pigpio can crash the JRE without this
 			log("begin()");
 
@@ -84,25 +83,28 @@ public abstract class PN532Interface<T extends IO<T, ?, ?>> {
 			}
 
 			pi4j = PN532ContextHelper.getContext();
-			io = getInterface();
+			PN532Utility.wrapInitializationExceptions(() -> io = getInterface());
 
 			log("begin() successful.");
 		}
 	}
 
-	public void wakeup() throws IllegalStateException, InterruptedException, IOException {
+	public void wakeup() throws InterruptedException, IOException {
 		log("wakeup()");
 
 		if (io == null) {
 			throw new IllegalStateException(prefixMessage("wakeup() called without calling begin()."));
 		}
 
-		wakeupInternal();
+		PN532Utility.wrapIoExceptionInterruptable(() -> {
+			wakeupInternal();
+			return null;
+		});
 
 		log("wakeup() successful.");
 	}
 
-	public PN532TransferResult writeCommand(byte[] header, byte[] body) throws IllegalArgumentException, IllegalStateException, InterruptedException, IOException {
+	public PN532TransferResult writeCommand(byte[] header, byte[] body) throws InterruptedException, IOException {
 		log("writeCommand(header: %s, body: %s)", () -> PN532Utility.getByteHexString(header), () -> PN532Utility.getByteHexString(body));
 
 		if (io == null) {
@@ -113,48 +115,50 @@ public abstract class PN532Interface<T extends IO<T, ?, ?>> {
 			throw new IllegalArgumentException(prefixMessage("writeCommand() called with null body."));
 		}
 
-		preWrite();
+		return PN532Utility.wrapIoExceptionInterruptable(() -> {
+			preWrite();
 
-		var buffer = ByteBuffer.allocate(header.length + body.length + 8);
+			var buffer = ByteBuffer.allocate(header.length + body.length + 8);
 
-		buffer.put(PREAMBLE);
-		buffer.put(START_CODE_1);
-		buffer.put(START_CODE_2);
+			buffer.put(PREAMBLE);
+			buffer.put(START_CODE_1);
+			buffer.put(START_CODE_2);
 
-		byte length = (byte) (header.length + body.length + 1);
-		buffer.put(length);
-		buffer.put((byte) (~length + 1));
+			var length = (byte) (header.length + body.length + 1);
+			buffer.put(length);
+			buffer.put((byte) (~length + 1));
 
-		buffer.put(HOST_TO_PN532);
-		buffer.put(header);
-		buffer.put(body);
+			buffer.put(HOST_TO_PN532);
+			buffer.put(header);
+			buffer.put(body);
 
-		byte sum = HOST_TO_PN532;
-		for (var i = 0; i < header.length; i++) {
-			sum += header[i];
-		}
-		for (var i = 0; i < body.length; i++) {
-			sum += body[i];
-		}
-		buffer.put((byte) (~sum + 1));
+			var sum = HOST_TO_PN532;
+			for (byte element : header) {
+				sum += element;
+			}
+			for (byte element : body) {
+				sum += element;
+			}
+			buffer.put((byte) (~sum + 1));
 
-		buffer.put(POSTAMBLE);
+			buffer.put(POSTAMBLE);
 
-		log("writeCommand() sending %s", () -> PN532Utility.getByteHexString(buffer.array()));
-		ioWrite(buffer);
-		lastCommand = header[0];
+			log("writeCommand() sending %s", () -> PN532Utility.getByteHexString(buffer.array()));
+			ioWrite(buffer);
+			lastCommand = header[0];
 
-		postWrite();
+			postWrite();
 
-		log("writeCommand() calling readAckFrame()");
-		return readAckFrame();
+			log("writeCommand() calling readAckFrame()");
+			return readAckFrame();
+		});
 	}
 
-	public PN532TransferResult writeCommand(byte[] header) throws IllegalArgumentException, IllegalStateException, InterruptedException, IOException {
+	public PN532TransferResult writeCommand(byte[] header) throws InterruptedException, IOException {
 		return writeCommand(header, new byte[0]);
 	}
 
-	protected PN532TransferResult readAckFrame() throws InterruptedException, IOException {
+	protected PN532TransferResult readAckFrame() throws InterruptedException {
 		var buffer = new byte[PN532_ACK.length];
 
 		if (!readFully(buffer, ackTimeout)) {
@@ -171,7 +175,7 @@ public abstract class PN532Interface<T extends IO<T, ?, ?>> {
 		return PN532TransferResult.OK;
 	}
 
-	public int readResponse(byte[] buffer, int expectedLength, int timeout) throws IllegalArgumentException, IllegalStateException, InterruptedException, IOException {
+	public int readResponse(byte[] buffer, int expectedLength, int timeout) throws InterruptedException, IOException {
 		log("readResponse(..., " + expectedLength + ", " + timeout + ")");
 
 		if (io == null) {
@@ -180,64 +184,66 @@ public abstract class PN532Interface<T extends IO<T, ?, ?>> {
 			throw new IllegalArgumentException(prefixMessage("readResponse() called with null buffer."));
 		}
 
-		var response = new byte[expectedLength + 2];
+		return PN532Utility.wrapIoExceptionInterruptable(() -> {
+			var response = new byte[expectedLength + 2];
 
-		if (!readFully(response, timeout)) {
-			log("readResponse() timed out.");
-			return PN532TransferResult.TIMEOUT.getValue();
-		}
+			if (!readFully(response, timeout)) {
+				log("readResponse() timed out.");
+				return PN532TransferResult.TIMEOUT.getValue();
+			}
 
-		var i = 0;
-		if (response[i++] != PREAMBLE || response[i++] != START_CODE_1 || response[i++] != START_CODE_2) {
-			log("readResponse() received bad starting bytes.");
-			return PN532TransferResult.INVALID_FRAME.getValue();
-		}
+			var i = 0;
+			if (response[i++] != PREAMBLE || response[i++] != START_CODE_1 || response[i++] != START_CODE_2) {
+				log("readResponse() received bad starting bytes.");
+				return PN532TransferResult.INVALID_FRAME.getValue();
+			}
 
-		byte length = response[i++];
+			var length = response[i++];
 
-		byte lengthCheck = (byte) (length + response[i++]);
-		if (lengthCheck != 0) {
-			log("readResponse() received bad length checksum.");
-			return PN532TransferResult.INVALID_FRAME.getValue();
-		}
+			var lengthCheck = (byte) (length + response[i++]);
+			if (lengthCheck != 0) {
+				log("readResponse() received bad length checksum.");
+				return PN532TransferResult.INVALID_FRAME.getValue();
+			}
 
-		byte command = (byte) (lastCommand + 1);
-		if (response[i++] != PN532_TO_HOST || response[i++] != command) {
-			log("readResponse() received bad command.");
-			return PN532TransferResult.INVALID_FRAME.getValue();
-		}
+			var command = (byte) (lastCommand + 1);
+			if (response[i++] != PN532_TO_HOST || response[i++] != command) {
+				log("readResponse() received bad command.");
+				return PN532TransferResult.INVALID_FRAME.getValue();
+			}
 
-		length -= 2;
-		if (length > expectedLength) {
-			log("readResponse() received length greater than expectedLength.");
-			return PN532TransferResult.INSUFFICIENT_SPACE.getValue();
-		}
+			length -= 2;
+			if (length > expectedLength) {
+				log("readResponse() received length greater than expectedLength.");
+				return PN532TransferResult.INSUFFICIENT_SPACE.getValue();
+			}
 
-		byte sum = PN532_TO_HOST;
-		sum += command;
+			var sum = PN532_TO_HOST;
+			sum += command;
 
-		for (var j = 0; j < length; j++) {
-			buffer[j] = response[i++];
-			sum += buffer[j];
-		}
+			for (var j = 0; j < length; j++) {
+				buffer[j] = response[i++];
+				sum += buffer[j];
+			}
 
-		byte check = (byte) (sum + response[i++]);
-		if (check != 0) {
-			log("readResponse() received bad checksum.");
-			return PN532TransferResult.INVALID_FRAME.getValue();
-		}
+			var check = (byte) (sum + response[i++]);
+			if (check != 0) {
+				log("readResponse() received bad checksum.");
+				return PN532TransferResult.INVALID_FRAME.getValue();
+			}
 
-		if (response[i] != POSTAMBLE) {
-			log("readResponse() received bad postamble.");
-			return PN532TransferResult.INVALID_FRAME.getValue();
-		}
+			if (response[i] != POSTAMBLE) {
+				log("readResponse() received bad postamble.");
+				return PN532TransferResult.INVALID_FRAME.getValue();
+			}
 
-		final int lengthFinal = length;
-		log("readResponse() returned " + length + " bytes: %s", () -> PN532Utility.getByteHexString(buffer, lengthFinal));
-		return length;
+			final int lengthFinal = length;
+			log("readResponse() returned " + length + " bytes: %s", () -> PN532Utility.getByteHexString(buffer, lengthFinal));
+			return (int) length;
+		});
 	}
 
-	public int readResponse(byte[] buffer, int expectedLength) throws IllegalArgumentException, IllegalStateException, InterruptedException, IOException {
+	public int readResponse(byte[] buffer, int expectedLength) throws InterruptedException, IOException {
 		return readResponse(buffer, expectedLength, readTimeout);
 	}
 
@@ -249,19 +255,19 @@ public abstract class PN532Interface<T extends IO<T, ?, ?>> {
 		log("close() successful.");
 	}
 
-	protected abstract T getInterface() throws IllegalArgumentException, UndeclaredThrowableException;
+	protected abstract T getInterface();
 
-	protected abstract void wakeupInternal() throws InterruptedException, IOException;
+	protected abstract void wakeupInternal() throws InterruptedException;
 
-	protected abstract boolean readFully(byte[] buffer, int timeout) throws InterruptedException, IOException;
+	protected abstract boolean readFully(byte[] buffer, int timeout) throws InterruptedException;
 
-	protected void preWrite() throws InterruptedException, IOException {
+	protected void preWrite() throws InterruptedException {
 	}
 
-	protected void postWrite() throws InterruptedException, IOException {
+	protected void postWrite() throws InterruptedException {
 	}
 
-	protected abstract void ioWrite(ByteBuffer buffer) throws IOException;
+	protected abstract void ioWrite(ByteBuffer buffer);
 
 	protected abstract boolean ioIsOpen();
 

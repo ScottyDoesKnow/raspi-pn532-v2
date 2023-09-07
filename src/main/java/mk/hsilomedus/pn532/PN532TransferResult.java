@@ -12,9 +12,9 @@ enum PN532TransferResult {
 	private static final PN532TransferResult[] VALUES = values();
 
 	public static PN532TransferResult fromValue(int value) {
-		for (var i = 0; i < VALUES.length; i++) {
-			if (VALUES[i].getValue() == value) {
-				return VALUES[i];
+		for (PN532TransferResult element : VALUES) {
+			if (element.getValue() == value) {
+				return element;
 			}
 		}
 

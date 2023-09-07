@@ -1,7 +1,6 @@
 
 package mk.hsilomedus.pn532;
 
-import java.lang.reflect.UndeclaredThrowableException;
 import java.nio.ByteBuffer;
 
 import com.pi4j.io.exception.IOException;
@@ -40,15 +39,15 @@ public class PN532I2C extends PN532Interface<I2C> {
 	}
 
 	@Override
-	protected I2C getInterface() throws IllegalArgumentException, UndeclaredThrowableException {
+	protected I2C getInterface() {
 		var config = I2C.newConfigBuilder(pi4j)
 				.id(id)
 				.name(name)
 				.bus(bus)
 				.device(device)
 				.build();
-		I2CProvider i2CProvider = pi4j.provider(provider);
-		return i2CProvider.create(config);
+		I2CProvider i2cProvider = pi4j.provider(provider);
+		return i2cProvider.create(config);
 	}
 
 	@Override
@@ -60,7 +59,7 @@ public class PN532I2C extends PN532Interface<I2C> {
 	protected boolean readFully(byte[] buffer, int timeout) throws InterruptedException, IOException {
 		var bufferTemp = new byte[buffer.length + 1];
 
-		long end = System.currentTimeMillis() + timeout;
+		var end = System.currentTimeMillis() + timeout;
 		while (true) {
 			if (io.read(bufferTemp, bufferTemp.length) == bufferTemp.length && (bufferTemp[0] & 1) != 0) {
 				System.arraycopy(bufferTemp, 1, buffer, 0, buffer.length);

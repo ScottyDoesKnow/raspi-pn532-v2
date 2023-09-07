@@ -1,6 +1,5 @@
 package mk.hsilomedus.pn532;
 
-import java.lang.reflect.UndeclaredThrowableException;
 import java.nio.ByteBuffer;
 
 import com.pi4j.io.exception.IOException;
@@ -13,7 +12,7 @@ public class PN532Serial extends PN532Interface<Serial> {
 	public static final String DEFAULT_PROVIDER = "pigpio-serial";
 	public static final String DEFAULT_DEVICE = "/dev/ttyAMA0"; // TODO /dev/serial0 https://raspberrypi.stackexchange.com/a/45571
 
-	private static final byte[] WAKUEP = new byte[] { 0x55, 0x55, 0, 0, 0 };
+	private static final byte[] WAKUEP = { 0x55, 0x55, 0, 0, 0 };
 
 	private final String device;
 
@@ -31,7 +30,7 @@ public class PN532Serial extends PN532Interface<Serial> {
 	}
 
 	@Override
-	protected Serial getInterface() throws IllegalArgumentException, UndeclaredThrowableException {
+	protected Serial getInterface() {
 		var config = Serial.newConfigBuilder(pi4j)
 				.id(id)
 				.name(name)
@@ -57,15 +56,15 @@ public class PN532Serial extends PN532Interface<Serial> {
 	protected boolean readFully(byte[] buffer, int timeout) throws InterruptedException, IOException {
 		var readTotal = 0;
 
-		long end = System.currentTimeMillis() + timeout;
+		var end = System.currentTimeMillis() + timeout;
 		while (true) {
-			int available = io.available();
+			var available = io.available();
 			if (available > 0) {
 				var toRead = Math.min(available, buffer.length - readTotal);
 				var read = io.read(buffer, readTotal, toRead);
 
 				if (read > 0) {
-					final int readTotalFinal = readTotal;
+					final var readTotalFinal = readTotal;
 					log("readFully() has so far received " + readTotal + " bytes: %s", () -> PN532Utility.getByteHexString(buffer, readTotalFinal));
 
 					readTotal += read;

@@ -3,7 +3,7 @@ package mk.hsilomedus.pn532;
 import com.pi4j.Pi4J;
 import com.pi4j.context.Context;
 
-public class PN532ContextHelper {
+public final class PN532ContextHelper {
 
 	// Synchronization could be done more efficiently but I don't think it matters
 	private static Context context;
