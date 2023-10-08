@@ -3,13 +3,13 @@ package mk.hsilomedus.pn532;
 import com.pi4j.Pi4J;
 import com.pi4j.context.Context;
 
-public final class PN532ContextHelper {
+public final class Pn532ContextHelper {
 
 	// Synchronization could be done more efficiently but I don't think it matters
 	private static Context context;
 	static final Object mutex = new Object();
 
-	private PN532ContextHelper() {
+	private Pn532ContextHelper() {
 		throw new UnsupportedOperationException("Utility class.");
 	}
 

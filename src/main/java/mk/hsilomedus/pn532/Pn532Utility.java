@@ -2,22 +2,21 @@ package mk.hsilomedus.pn532;
 
 import java.io.IOException;
 import java.lang.reflect.UndeclaredThrowableException;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
-import java.util.Date;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.pi4j.provider.exception.ProviderNotFoundException;
 
-public final class PN532Utility {
+public final class Pn532Utility {
 
-	private static final ThreadLocal<DateFormat> DATE_FORMAT = ThreadLocal.withInitial(() -> new SimpleDateFormat("yyyy/MM/dd HH:mm:ss.SSS"));
+	private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss.SSS");
 
 	private static Logger logger = null;
 
-	private PN532Utility() {
+	private Pn532Utility() {
 		throw new UnsupportedOperationException("Utility class.");
 	}
 
@@ -27,13 +26,13 @@ public final class PN532Utility {
 
 	public static void log(String message) {
 		if (logger != null) {
-			logger.log(Level.FINE, () -> DATE_FORMAT.get().format(new Date()) + " " + message + System.lineSeparator());
+			logger.log(Level.FINE, () -> LocalDateTime.now().format(DATE_FORMAT) + "   " + message + System.lineSeparator());
 		}
 	}
 
 	public static void log(Supplier<String> message) {
 		if (logger != null) {
-			logger.log(Level.FINE, () -> DATE_FORMAT.get().format(new Date()) + " " + message.get() + System.lineSeparator());
+			logger.log(Level.FINE, () -> LocalDateTime.now().format(DATE_FORMAT) + "   " + message.get() + System.lineSeparator());
 		}
 	}
 
@@ -50,8 +49,8 @@ public final class PN532Utility {
 		output.append('[');
 
 		if (bytes != null) {
-			var first = true;
-			for (var i = 0; i < length; i++) {
+			boolean first = true;
+			for (int i = 0; i < length; i++) {
 				if (!first) {
 					output.append(' ');
 				}
@@ -73,9 +72,9 @@ public final class PN532Utility {
 		try {
 			runnable.run();
 		} catch (IllegalArgumentException | ProviderNotFoundException e) { // Handle pi4j/pigpio nonsense
-			throw PN532Utility.getCheckedIoException(e);
+			throw Pn532Utility.getCheckedIoException(e);
 		} catch (UndeclaredThrowableException e) { // Handle pigpio nonsense
-			throw PN532Utility.getCheckedIoException(e, true);
+			throw Pn532Utility.getCheckedIoException(e, true);
 		}
 	}
 

@@ -1,6 +1,6 @@
 package mk.hsilomedus.pn532;
 
-enum PN532TransferResult {
+enum Pn532TransferResult {
 	OK(0),
 	UNDEFINED(-1),
 	TIMEOUT(-2),
@@ -9,10 +9,10 @@ enum PN532TransferResult {
 	INVALID_FW_VERSION(-5),
 	INSUFFICIENT_SPACE(-6);
 
-	private static final PN532TransferResult[] VALUES = values();
+	private static final Pn532TransferResult[] VALUES = values();
 
-	public static PN532TransferResult fromValue(int value) {
-		for (PN532TransferResult element : VALUES) {
+	public static Pn532TransferResult fromValue(int value) {
+		for (var element : VALUES) {
 			if (element.getValue() == value) {
 				return element;
 			}
@@ -23,7 +23,7 @@ enum PN532TransferResult {
 
 	private final int value;
 
-	PN532TransferResult(int value) {
+	Pn532TransferResult(int value) {
 		this.value = value;
 	}
 

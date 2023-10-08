@@ -5,13 +5,13 @@ import java.util.function.Supplier;
 
 import com.pi4j.io.IO;
 
-public class PN532<T extends IO<T, ?, ?>> implements AutoCloseable {
+public class Pn532<T extends IO<T, ?, ?>> implements AutoCloseable {
 
 	private static final byte COMMAND_GET_FW_VERSION = 0x02;
 	private static final byte COMMAND_SAM_CONFIG = 0x14;
 	private static final byte COMMAND_IN_LIST_PASSIVE_TARGET = 0x4A;
 
-	private final PN532Interface<T> connection;
+	private final Pn532Connection<T> connection;
 	private final byte[] buffer = new byte[20];
 
 	public int getAckTimeout() {
@@ -34,7 +34,7 @@ public class PN532<T extends IO<T, ?, ?>> implements AutoCloseable {
 		return connection.getDisplayName();
 	}
 
-	public PN532(PN532Interface<T> connection) {
+	public Pn532(Pn532Connection<T> connection) {
 		if (connection == null) {
 			throw new IllegalArgumentException("PN532 constructed with null connection.");
 		}
@@ -56,15 +56,15 @@ public class PN532<T extends IO<T, ?, ?>> implements AutoCloseable {
 		var command = new byte[1];
 		command[0] = COMMAND_GET_FW_VERSION;
 
-		var writeStatus = connection.writeCommand(command);
-		if (writeStatus != PN532TransferResult.OK) {
+		Pn532TransferResult writeStatus = connection.writeCommand(command);
+		if (writeStatus != Pn532TransferResult.OK) {
 			log("getFirmwareVersion() writeCommand returned " + writeStatus);
 			return writeStatus.getValue();
 		}
 
-		var responseStatus = connection.readResponse(buffer, 12);
+		int responseStatus = connection.readResponse(buffer, 12);
 		if (responseStatus < 0) {
-			log("getFirmwareVersion() readResponse returned " + PN532TransferResult.fromValue(responseStatus));
+			log("getFirmwareVersion() readResponse returned " + Pn532TransferResult.fromValue(responseStatus));
 			return responseStatus;
 		}
 
@@ -78,7 +78,7 @@ public class PN532<T extends IO<T, ?, ?>> implements AutoCloseable {
 
 		if (response == 0) {
 			log("getFirmwareVersion() read 0.");
-			return PN532TransferResult.INVALID_FW_VERSION.getValue();
+			return Pn532TransferResult.INVALID_FW_VERSION.getValue();
 		}
 
 		connection.setModelName("PN5" + String.format("%02X", buffer[0]));
@@ -93,19 +93,19 @@ public class PN532<T extends IO<T, ?, ?>> implements AutoCloseable {
 
 		var command = new byte[4];
 		command[0] = COMMAND_SAM_CONFIG;
-		command[1] = 0x01; // normal mode
-		command[2] = 0x14; // timeout (50ms * 20 = 1s)
-		command[3] = 0x01; // use IRQ pin
+		command[1] = 0x01; // Normal mode
+		command[2] = 0x14; // Timeout (50ms * 20 = 1s)
+		command[3] = 0x01; // Use IRQ pin
 
-		var writeStatus = connection.writeCommand(command);
-		if (writeStatus != PN532TransferResult.OK) {
+		Pn532TransferResult writeStatus = connection.writeCommand(command);
+		if (writeStatus != Pn532TransferResult.OK) {
 			log("samConfig() writeCommand returned " + writeStatus);
 			return false;
 		}
 
-		var responseStatus = connection.readResponse(buffer, 12);
+		int responseStatus = connection.readResponse(buffer, 12);
 		if (responseStatus < 0) {
-			log("samConfig() readResponse returned " + PN532TransferResult.fromValue(responseStatus));
+			log("samConfig() readResponse returned " + Pn532TransferResult.fromValue(responseStatus));
 			return false;
 		} else {
 			log("samConfig() successful.");
@@ -118,18 +118,18 @@ public class PN532<T extends IO<T, ?, ?>> implements AutoCloseable {
 
 		var command = new byte[3];
 		command[0] = COMMAND_IN_LIST_PASSIVE_TARGET;
-		command[1] = 1; // max 1 cards at once (we can set this to 2 later) - comment from C++ code
+		command[1] = 1; // Max 1 cards at once (we can set this to 2 later) - comment from C++ code
 		command[2] = cardBaudRate;
 
-		var writeStatus = connection.writeCommand(command);
-		if (writeStatus != PN532TransferResult.OK) {
+		Pn532TransferResult writeStatus = connection.writeCommand(command);
+		if (writeStatus != Pn532TransferResult.OK) {
 			log("readPassiveTargetId() writeCommand returned " + writeStatus);
 			return writeStatus.getValue();
 		}
 
-		var responseStatus = connection.readResponse(buffer, 20);
+		int responseStatus = connection.readResponse(buffer, 20);
 		if (responseStatus < 0) {
-			log("readPassiveTargetId() readResponse returned " + PN532TransferResult.fromValue(responseStatus));
+			log("readPassiveTargetId() readResponse returned " + Pn532TransferResult.fromValue(responseStatus));
 			return responseStatus;
 		}
 
@@ -148,20 +148,20 @@ public class PN532<T extends IO<T, ?, ?>> implements AutoCloseable {
 
 		if (buffer[0] != 1) {
 			log("readPassiveTargetId() failed with " + buffer[0] + " tags found.");
-			return PN532TransferResult.UNDEFINED.getValue();
+			return Pn532TransferResult.UNDEFINED.getValue();
 		}
 
-		/* Card appears to be Mifare Classic */
+		/* Card appears to be MIFARE Classic */
 		int uidLength = buffer[5];
 
 		// TODO need to check if length is too long, and also if my buffer is too small?
-		// TODO create Mifare class object?
+		// TODO create MIFARE class object?
 
-		for (var i = 0; i < uidLength; i++) {
+		for (int i = 0; i < uidLength; i++) {
 			result[i] = buffer[6 + i];
 		}
 
-		log("readPassiveTargetId() returned %s", () -> PN532Utility.getByteHexString(result));
+		log("readPassiveTargetId() returned %s", () -> Pn532Utility.getByteHexString(result));
 		return uidLength;
 	}
 

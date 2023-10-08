@@ -9,7 +9,7 @@ import com.pi4j.io.spi.Spi;
 import com.pi4j.io.spi.SpiProvider;
 
 // TODO Don't know what's up with the whole reset pin thing from the Java code
-public class PN532Spi extends PN532Interface<Spi> {
+public class Pn532Spi extends Pn532Connection<Spi> {
 
 	public static final String PROVIDER_DO_PIGPIO = "pigpio-digital-output";
 	public static final String PROVIDER_DO_LINUXFS = "linuxfs-digital-output";
@@ -32,19 +32,19 @@ public class PN532Spi extends PN532Interface<Spi> {
 	private DigitalOutput csOutput;
 
 	/**
-	 * Defaults to {@link PN532Spi#DEFAULT_PROVIDER}, {@link PN532Spi#DEFAULT_PROVIDER_DO},
-	 *  {@link PN532Spi#DEFAULT_CHANNEL}, and {@link PN532Spi#CS_PIN_CE0}.
+	 * Defaults to {@link Pn532Spi#DEFAULT_PROVIDER}, {@link Pn532Spi#DEFAULT_PROVIDER_DO},
+	 *  {@link Pn532Spi#DEFAULT_CHANNEL}, and {@link Pn532Spi#CS_PIN_CE0}.
 	 */
-	public PN532Spi() {
+	public Pn532Spi() {
 		this(DEFAULT_PROVIDER, DEFAULT_PROVIDER_DO, DEFAULT_CHANNEL, CS_PIN_CE0);
 	}
 
 	/**
 	 * @param channel The SPI channel to use. Common values are 0 and 1.
-	 * @param csPin The Chip Select Pin to use. Common values are {@link PN532Spi#CS_PIN_CE0}
-	 *     and {@link PN532Spi#CS_PIN_CE1}, but any GPIO can be used.
+	 * @param csPin The Chip Select Pin to use. Common values are {@link Pn532Spi#CS_PIN_CE0}
+	 *     and {@link Pn532Spi#CS_PIN_CE1}, but any GPIO can be used.
 	 */
-	public PN532Spi(String provider, String providerDo, int channel, int csPin) {
+	public Pn532Spi(String provider, String providerDo, int channel, int csPin) {
 		super(provider, "spi-" + channel + "-" + csPin, "SPI " + channel + " " + csPin,
 				"SPI Channel " + channel + ", CS Pin " + csPin);
 
@@ -81,9 +81,9 @@ public class PN532Spi extends PN532Interface<Spi> {
 
 	@Override
 	protected boolean readFully(byte[] buffer, int timeout) throws InterruptedException, IOException {
-		var readTotal = 0;
+		int readTotal = 0;
 
-		var end = System.currentTimeMillis() + timeout;
+		long end = System.currentTimeMillis() + timeout;
 		while (true) {
 			if (!isReady()) {
 				Thread.sleep(10);
@@ -96,11 +96,11 @@ public class PN532Spi extends PN532Interface<Spi> {
 
 				try {
 					while (true) {
-						var read = io.read(buffer, readTotal, buffer.length - readTotal); // Processed in finally
+						int read = io.read(buffer, readTotal, buffer.length - readTotal); // Processed in finally
 
 						if (read > 0) {
-							final var readTotalFinal = readTotal;
-							log("readFully() has so far received " + readTotal + " (reversed) bytes: %s", () -> PN532Utility.getByteHexString(buffer, readTotalFinal));
+							final int readTotalFinal = readTotal;
+							log("readFully() has so far received " + readTotal + " (reversed) bytes: %s", () -> Pn532Utility.getByteHexString(buffer, readTotalFinal));
 
 							readTotal += read;
 							if (readTotal >= buffer.length) { // Shouldn't happen, but >= for safety
@@ -153,7 +153,7 @@ public class PN532Spi extends PN532Interface<Spi> {
 		csOutput.low(); // No delay in C++ code, so not calling csLow()
 		writeByte(SPI_STATUS_READ, false); // Not logged because isReady() spams too much
 
-		var result = reverseByte(io.readByte()) == SPI_READY;
+		boolean result = reverseByte(io.readByte()) == SPI_READY;
 		csOutput.high();
 
 		return result;
@@ -175,10 +175,10 @@ public class PN532Spi extends PN532Interface<Spi> {
 
 	// TODO From the Java code, should try to understand and maybe optimize this
 	private byte reverseByte(byte value) {
-		var input = value;
+		byte input = value;
 		byte output = 0;
 
-		for (var i = 0; i < 8; i++) {
+		for (int i = 0; i < 8; i++) {
 			if ((input & 0x01) > 0) {
 				output |= 1 << (7 - i);
 			}
@@ -189,7 +189,7 @@ public class PN532Spi extends PN532Interface<Spi> {
 	}
 
 	private void reverseBytes(byte[] values) {
-		for (var i = 0; i < values.length; i++) {
+		for (int i = 0; i < values.length; i++) {
 			values[i] = reverseByte(values[i]);
 		}
 	}

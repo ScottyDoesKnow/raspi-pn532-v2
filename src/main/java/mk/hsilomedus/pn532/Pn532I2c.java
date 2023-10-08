@@ -7,7 +7,7 @@ import com.pi4j.io.exception.IOException;
 import com.pi4j.io.i2c.I2C;
 import com.pi4j.io.i2c.I2CProvider;
 
-public class PN532I2C extends PN532Interface<I2C> {
+public class Pn532I2c extends Pn532Connection<I2C> {
 
 	public static final String PROVIDER_LINUXFS = "linuxfs-i2c";
 	public static final String PROVIDER_PIGPIO = "pigpio-i2c";
@@ -20,16 +20,16 @@ public class PN532I2C extends PN532Interface<I2C> {
 	private final int device;
 
 	/**
-	 * Defaults to {@link PN532I2C#DEFAULT_PROVIDER}, {@link PN532I2C#DEFAULT_BUS}, and {@link PN532I2C#DEFAULT_DEVICE}.
+	 * Defaults to {@link Pn532I2c#DEFAULT_PROVIDER}, {@link Pn532I2c#DEFAULT_BUS}, and {@link Pn532I2c#DEFAULT_DEVICE}.
 	 */
-	public PN532I2C() {
+	public Pn532I2c() {
 		this(DEFAULT_PROVIDER, DEFAULT_BUS, DEFAULT_DEVICE);
 	}
 
 	/**
-	 * @param provider The provider to use. Options are {@link PN532I2C#PROVIDER_LINUXFS} or {@link PN532I2C#PROVIDER_PIGPIO}.
+	 * @param provider The provider to use. Options are {@link Pn532I2c#PROVIDER_LINUXFS} or {@link Pn532I2c#PROVIDER_PIGPIO}.
 	 */
-	public PN532I2C(String provider, int bus, int device) {
+	public Pn532I2c(String provider, int bus, int device) {
 		super(provider, "i2c-" + bus + "-0x" + Integer.toHexString(device),
 				"I2C " + bus + " 0x" + Integer.toHexString(device),
 				"I2C Bus " + bus + ", Device 0x" + Integer.toHexString(device));
@@ -59,11 +59,11 @@ public class PN532I2C extends PN532Interface<I2C> {
 	protected boolean readFully(byte[] buffer, int timeout) throws InterruptedException, IOException {
 		var bufferTemp = new byte[buffer.length + 1];
 
-		var end = System.currentTimeMillis() + timeout;
+		long end = System.currentTimeMillis() + timeout;
 		while (true) {
 			if (io.read(bufferTemp, bufferTemp.length) == bufferTemp.length && (bufferTemp[0] & 1) != 0) {
 				System.arraycopy(bufferTemp, 1, buffer, 0, buffer.length);
-				log("readFully() received " + buffer.length + " bytes: %s", () -> PN532Utility.getByteHexString(buffer));
+				log("readFully() received " + buffer.length + " bytes: %s", () -> Pn532Utility.getByteHexString(buffer));
 				return true;
 			}
 

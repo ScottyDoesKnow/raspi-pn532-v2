@@ -9,7 +9,7 @@ import com.pi4j.context.Context;
 import com.pi4j.io.IO;
 
 // Don't know how to do this without the ?
-public abstract class PN532Interface<T extends IO<T, ?, ?>> {
+public abstract class Pn532Connection<T extends IO<T, ?, ?>> {
 
 	public static final int DEFAULT_ACK_TIMEOUT = 1000;
 	public static final int DEFAULT_READ_TIMEOUT = 1000;
@@ -67,7 +67,7 @@ public abstract class PN532Interface<T extends IO<T, ?, ?>> {
 		firmwareVersion = value;
 	}
 
-	protected PN532Interface(String provider, String id, String name, String displaySuffix) {
+	protected Pn532Connection(String provider, String id, String name, String displaySuffix) {
 		this.provider = provider;
 		this.id = "pn5xx-" + id;
 		this.name = "PN5xx " + name;
@@ -75,15 +75,15 @@ public abstract class PN532Interface<T extends IO<T, ?, ?>> {
 	}
 
 	public void begin() throws IOException {
-		synchronized (PN532ContextHelper.mutex) { // pigpio can crash the JRE without this
+		synchronized (Pn532ContextHelper.mutex) { // pigpio can crash the JRE without this
 			log("begin()");
 
 			if (pi4j != null) {
 				throw new IllegalStateException(prefixMessage("begin() can only be called once."));
 			}
 
-			pi4j = PN532ContextHelper.getContext();
-			PN532Utility.wrapInitializationExceptions(() -> io = getInterface());
+			pi4j = Pn532ContextHelper.getContext();
+			Pn532Utility.wrapInitializationExceptions(() -> io = getInterface());
 
 			log("begin() successful.");
 		}
@@ -96,7 +96,7 @@ public abstract class PN532Interface<T extends IO<T, ?, ?>> {
 			throw new IllegalStateException(prefixMessage("wakeup() called without calling begin()."));
 		}
 
-		PN532Utility.wrapIoExceptionInterruptable(() -> {
+		Pn532Utility.wrapIoExceptionInterruptable(() -> {
 			wakeupInternal();
 			return null;
 		});
@@ -104,8 +104,8 @@ public abstract class PN532Interface<T extends IO<T, ?, ?>> {
 		log("wakeup() successful.");
 	}
 
-	public PN532TransferResult writeCommand(byte[] header, byte[] body) throws InterruptedException, IOException {
-		log("writeCommand(header: %s, body: %s)", () -> PN532Utility.getByteHexString(header), () -> PN532Utility.getByteHexString(body));
+	public Pn532TransferResult writeCommand(byte[] header, byte[] body) throws InterruptedException, IOException {
+		log("writeCommand(header: %s, body: %s)", () -> Pn532Utility.getByteHexString(header), () -> Pn532Utility.getByteHexString(body));
 
 		if (io == null) {
 			throw new IllegalStateException(prefixMessage("writeCommand() called without calling begin()."));
@@ -115,7 +115,7 @@ public abstract class PN532Interface<T extends IO<T, ?, ?>> {
 			throw new IllegalArgumentException(prefixMessage("writeCommand() called with null body."));
 		}
 
-		return PN532Utility.wrapIoExceptionInterruptable(() -> {
+		return Pn532Utility.wrapIoExceptionInterruptable(() -> {
 			preWrite();
 
 			var buffer = ByteBuffer.allocate(header.length + body.length + 8);
@@ -124,7 +124,7 @@ public abstract class PN532Interface<T extends IO<T, ?, ?>> {
 			buffer.put(START_CODE_1);
 			buffer.put(START_CODE_2);
 
-			var length = (byte) (header.length + body.length + 1);
+			byte length = (byte) (header.length + body.length + 1);
 			buffer.put(length);
 			buffer.put((byte) (~length + 1));
 
@@ -132,7 +132,7 @@ public abstract class PN532Interface<T extends IO<T, ?, ?>> {
 			buffer.put(header);
 			buffer.put(body);
 
-			var sum = HOST_TO_PN532;
+			byte sum = HOST_TO_PN532;
 			for (byte element : header) {
 				sum += element;
 			}
@@ -143,7 +143,7 @@ public abstract class PN532Interface<T extends IO<T, ?, ?>> {
 
 			buffer.put(POSTAMBLE);
 
-			log("writeCommand() sending %s", () -> PN532Utility.getByteHexString(buffer.array()));
+			log("writeCommand() sending %s", () -> Pn532Utility.getByteHexString(buffer.array()));
 			ioWrite(buffer);
 			lastCommand = header[0];
 
@@ -154,25 +154,25 @@ public abstract class PN532Interface<T extends IO<T, ?, ?>> {
 		});
 	}
 
-	public PN532TransferResult writeCommand(byte[] header) throws InterruptedException, IOException {
+	public Pn532TransferResult writeCommand(byte[] header) throws InterruptedException, IOException {
 		return writeCommand(header, new byte[0]);
 	}
 
-	protected PN532TransferResult readAckFrame() throws InterruptedException {
+	protected Pn532TransferResult readAckFrame() throws InterruptedException {
 		var buffer = new byte[PN532_ACK.length];
 
 		if (!readFully(buffer, ackTimeout)) {
 			log("readAckFrame() timed out.");
-			return PN532TransferResult.TIMEOUT;
+			return Pn532TransferResult.TIMEOUT;
 		}
 
 		if (!Arrays.equals(buffer, PN532_ACK)) {
 			log("readAckFrame() was invalid.");
-			return PN532TransferResult.INVALID_ACK;
+			return Pn532TransferResult.INVALID_ACK;
 		}
 
 		log("readAckFrame() successful.");
-		return PN532TransferResult.OK;
+		return Pn532TransferResult.OK;
 	}
 
 	public int readResponse(byte[] buffer, int expectedLength, int timeout) throws InterruptedException, IOException {
@@ -184,61 +184,61 @@ public abstract class PN532Interface<T extends IO<T, ?, ?>> {
 			throw new IllegalArgumentException(prefixMessage("readResponse() called with null buffer."));
 		}
 
-		return PN532Utility.wrapIoExceptionInterruptable(() -> {
+		return Pn532Utility.wrapIoExceptionInterruptable(() -> {
 			var response = new byte[expectedLength + 2];
 
 			if (!readFully(response, timeout)) {
 				log("readResponse() timed out.");
-				return PN532TransferResult.TIMEOUT.getValue();
+				return Pn532TransferResult.TIMEOUT.getValue();
 			}
 
-			var i = 0;
+			int i = 0;
 			if (response[i++] != PREAMBLE || response[i++] != START_CODE_1 || response[i++] != START_CODE_2) {
 				log("readResponse() received bad starting bytes.");
-				return PN532TransferResult.INVALID_FRAME.getValue();
+				return Pn532TransferResult.INVALID_FRAME.getValue();
 			}
 
-			var length = response[i++];
+			byte length = response[i++];
 
-			var lengthCheck = (byte) (length + response[i++]);
+			byte lengthCheck = (byte) (length + response[i++]);
 			if (lengthCheck != 0) {
 				log("readResponse() received bad length checksum.");
-				return PN532TransferResult.INVALID_FRAME.getValue();
+				return Pn532TransferResult.INVALID_FRAME.getValue();
 			}
 
-			var command = (byte) (lastCommand + 1);
+			byte command = (byte) (lastCommand + 1);
 			if (response[i++] != PN532_TO_HOST || response[i++] != command) {
 				log("readResponse() received bad command.");
-				return PN532TransferResult.INVALID_FRAME.getValue();
+				return Pn532TransferResult.INVALID_FRAME.getValue();
 			}
 
 			length -= 2;
 			if (length > expectedLength) {
 				log("readResponse() received length greater than expectedLength.");
-				return PN532TransferResult.INSUFFICIENT_SPACE.getValue();
+				return Pn532TransferResult.INSUFFICIENT_SPACE.getValue();
 			}
 
-			var sum = PN532_TO_HOST;
+			byte sum = PN532_TO_HOST;
 			sum += command;
 
-			for (var j = 0; j < length; j++) {
+			for (int j = 0; j < length; j++) {
 				buffer[j] = response[i++];
 				sum += buffer[j];
 			}
 
-			var check = (byte) (sum + response[i++]);
+			byte check = (byte) (sum + response[i++]);
 			if (check != 0) {
 				log("readResponse() received bad checksum.");
-				return PN532TransferResult.INVALID_FRAME.getValue();
+				return Pn532TransferResult.INVALID_FRAME.getValue();
 			}
 
 			if (response[i] != POSTAMBLE) {
 				log("readResponse() received bad postamble.");
-				return PN532TransferResult.INVALID_FRAME.getValue();
+				return Pn532TransferResult.INVALID_FRAME.getValue();
 			}
 
 			final int lengthFinal = length;
-			log("readResponse() returned " + length + " bytes: %s", () -> PN532Utility.getByteHexString(buffer, lengthFinal));
+			log("readResponse() returned " + length + " bytes: %s", () -> Pn532Utility.getByteHexString(buffer, lengthFinal));
 			return (int) length;
 		});
 	}
@@ -274,15 +274,15 @@ public abstract class PN532Interface<T extends IO<T, ?, ?>> {
 	protected abstract void ioClose();
 
 	void log(String message) {
-		PN532Utility.log(prefixMessage(message));
+		Pn532Utility.log(prefixMessage(message));
 	}
 
 	void log(String message, Supplier<String> arg1) {
-		PN532Utility.log(prefixMessage(message), arg1);
+		Pn532Utility.log(prefixMessage(message), arg1);
 	}
 
 	void log(String message, Supplier<String> arg1, Supplier<String> arg2) {
-		PN532Utility.log(prefixMessage(message), arg1, arg2);
+		Pn532Utility.log(prefixMessage(message), arg1, arg2);
 	}
 
 	String prefixMessage(String message) {
