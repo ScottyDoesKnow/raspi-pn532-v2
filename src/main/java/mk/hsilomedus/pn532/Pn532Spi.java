@@ -80,7 +80,7 @@ public class Pn532Spi extends Pn532Connection<Spi> {
 	}
 
 	@Override
-	protected boolean readFully(byte[] buffer, int timeout) throws InterruptedException, IOException {
+	protected boolean read(byte[] buffer, int startIndex, int length, int timeout) throws InterruptedException, IOException {
 		int readTotal = 0;
 
 		long end = System.currentTimeMillis() + timeout;
@@ -96,14 +96,15 @@ public class Pn532Spi extends Pn532Connection<Spi> {
 
 				try {
 					while (true) {
-						int read = io.read(buffer, readTotal, buffer.length - readTotal); // Processed in finally
+						int read = io.read(buffer, startIndex + readTotal, buffer.length - startIndex - readTotal); // Processed in finally
 
 						if (read > 0) {
-							final int readTotalFinal = readTotal;
-							log("readFully() has so far received " + readTotal + " (reversed) bytes: %s", () -> Pn532Utility.getByteHexString(buffer, readTotalFinal));
-
 							readTotal += read;
-							if (readTotal >= buffer.length) { // Shouldn't happen, but >= for safety
+							final int readTotalFinal = readTotal;
+							log("read() has so far received " + readTotal + " (reversed) bytes: %s",
+									() -> Pn532Utility.getByteHexString(buffer, startIndex, readTotalFinal));
+
+							if (readTotal >= length) { // Shouldn't happen, but >= for safety
 								return true;
 							}
 						}

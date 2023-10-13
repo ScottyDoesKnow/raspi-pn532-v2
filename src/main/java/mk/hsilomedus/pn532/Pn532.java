@@ -12,7 +12,7 @@ public class Pn532<T extends IO<T, ?, ?>> implements AutoCloseable {
 	private static final byte COMMAND_IN_LIST_PASSIVE_TARGET = 0x4A;
 
 	private final Pn532Connection<T> connection;
-	private final byte[] buffer = new byte[20];
+	private final byte[] buffer = new byte[16];
 
 	public int getAckTimeout() {
 		return connection.getAckTimeout();
@@ -62,7 +62,7 @@ public class Pn532<T extends IO<T, ?, ?>> implements AutoCloseable {
 			return writeStatus.getValue();
 		}
 
-		int responseStatus = connection.readResponse(buffer, 12);
+		int responseStatus = connection.readResponse(buffer, 4);
 		if (responseStatus < 0) {
 			log("getFirmwareVersion() readResponse returned " + Pn532TransferResult.fromValue(responseStatus));
 			return responseStatus;
@@ -103,7 +103,7 @@ public class Pn532<T extends IO<T, ?, ?>> implements AutoCloseable {
 			return false;
 		}
 
-		int responseStatus = connection.readResponse(buffer, 12);
+		int responseStatus = connection.readResponse(buffer, 0);
 		if (responseStatus < 0) {
 			log("samConfig() readResponse returned " + Pn532TransferResult.fromValue(responseStatus));
 			return false;
@@ -127,7 +127,8 @@ public class Pn532<T extends IO<T, ?, ?>> implements AutoCloseable {
 			return writeStatus.getValue();
 		}
 
-		int responseStatus = connection.readResponse(buffer, 20);
+		// 16 because uidLength should be max 10
+		int responseStatus = connection.readResponse(buffer, 16);
 		if (responseStatus < 0) {
 			log("readPassiveTargetId() readResponse returned " + Pn532TransferResult.fromValue(responseStatus));
 			return responseStatus;
@@ -153,9 +154,10 @@ public class Pn532<T extends IO<T, ?, ?>> implements AutoCloseable {
 
 		/* Card appears to be MIFARE Classic */
 		int uidLength = buffer[5];
-
-		// TODO need to check if length is too long, and also if my buffer is too small?
-		// TODO create MIFARE class object?
+		if (6 + uidLength > buffer.length) {
+			log("readPassiveTargetId() failed because uidLength of '" + uidLength + "' won't fit in buffer.");
+			return Pn532TransferResult.UNDEFINED.getValue();
+		}
 
 		for (int i = 0; i < uidLength; i++) {
 			result[i] = buffer[6 + i];

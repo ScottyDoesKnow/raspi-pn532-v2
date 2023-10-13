@@ -72,7 +72,7 @@ public class Pn532SamThread<T extends IO<T, ?, ?>> extends Thread {
 			}
 			println(pn532, "running.");
 
-			var buffer = new byte[8]; // TODO 8 is too small, isn't it? I think PN532.java will only go to 14 which also seems too small
+			var buffer = new byte[10]; // UID should be max 10 bytes
 			while (!closed) {
 				int length;
 				try {

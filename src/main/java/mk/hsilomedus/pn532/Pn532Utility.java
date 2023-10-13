@@ -44,13 +44,13 @@ public final class Pn532Utility {
 		log(() -> String.format(message, arg1.get(), arg2.get()));
 	}
 
-	public static String getByteHexString(byte[] bytes, int length) {
+	public static String getByteHexString(byte[] bytes, int startIndex, int length) {
 		var output = new StringBuilder();
 		output.append('[');
 
 		if (bytes != null) {
 			boolean first = true;
-			for (int i = 0; i < length; i++) {
+			for (int i = startIndex; i < startIndex + length; i++) {
 				if (!first) {
 					output.append(' ');
 				}
@@ -65,7 +65,7 @@ public final class Pn532Utility {
 	}
 
 	public static String getByteHexString(byte[] bytes) {
-		return getByteHexString(bytes, bytes.length);
+		return getByteHexString(bytes, 0, bytes.length);
 	}
 
 	public static void wrapInitializationExceptions(Runnable runnable) throws IOException {
@@ -81,15 +81,17 @@ public final class Pn532Utility {
 	public static void wrapIoException(Runnable runnable) throws IOException {
 		try {
 			runnable.run();
-		} catch (com.pi4j.io.exception.IOException e) {
+			// Pi4JException rather than the Pi4J IOException, encountered while writing to a non-existent I2C device
+		} catch (com.pi4j.exception.Pi4JException e) {
 			throw getCheckedIoException(e);
 		}
 	}
 
-	public static <T> T wrapIoExceptionInterruptable(InterruptableRunnable<T> runnable) throws InterruptedException, IOException {
+	public static <T> T wrapIoExceptionInterruptable(InterruptableIoRunnable<T> runnable) throws InterruptedException, IOException {
 		try {
 			return runnable.run();
-		} catch (com.pi4j.io.exception.IOException e) {
+			// Pi4JException rather than the Pi4J IOException, encountered while writing to a non-existent I2C device
+		} catch (com.pi4j.exception.Pi4JException e) {
 			throw getCheckedIoException(e);
 		}
 	}
@@ -117,7 +119,7 @@ public final class Pn532Utility {
 	}
 
 	@FunctionalInterface
-	public interface InterruptableRunnable<T> {
-		T run() throws InterruptedException;
+	public interface InterruptableIoRunnable<T> {
+		T run() throws InterruptedException, IOException;
 	}
 }

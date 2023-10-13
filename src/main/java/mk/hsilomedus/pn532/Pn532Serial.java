@@ -6,11 +6,10 @@ import com.pi4j.io.exception.IOException;
 import com.pi4j.io.serial.Serial;
 import com.pi4j.io.serial.SerialProvider;
 
-// TODO not working yet, not enough power? 5v vs 3.3v?
 public class Pn532Serial extends Pn532Connection<Serial> {
 
 	public static final String DEFAULT_PROVIDER = "pigpio-serial";
-	public static final String DEFAULT_DEVICE = "/dev/ttyAMA0"; // TODO /dev/serial0 https://raspberrypi.stackexchange.com/a/45571
+	public static final String DEFAULT_DEVICE = "/dev/ttyAMA0";
 
 	private static final byte[] WAKUEP = { 0x55, 0x55, 0, 0, 0 };
 
@@ -48,27 +47,26 @@ public class Pn532Serial extends Pn532Connection<Serial> {
 	@Override
 	protected void wakeupInternal() throws IOException {
 		io.write(WAKUEP);
-		//io.flush(); // TODO from Java code
 		io.drain();
 	}
 
 	@Override
-	protected boolean readFully(byte[] buffer, int timeout) throws InterruptedException, IOException {
+	protected boolean read(byte[] buffer, int startIndex, int length, int timeout) throws InterruptedException, IOException {
 		int readTotal = 0;
 
 		long end = System.currentTimeMillis() + timeout;
 		while (true) {
 			int available = io.available();
 			if (available > 0) {
-				int toRead = Math.min(available, buffer.length - readTotal);
-				int read = io.read(buffer, readTotal, toRead);
+				int toRead = Math.min(available, length - readTotal);
+				int read = io.read(buffer, startIndex + readTotal, toRead);
 
 				if (read > 0) {
-					final int readTotalFinal = readTotal;
-					log("readFully() has so far received " + readTotal + " bytes: %s", () -> Pn532Utility.getByteHexString(buffer, readTotalFinal));
-
 					readTotal += read;
-					if (readTotal >= buffer.length) { // Shouldn't happen, but >= for safety
+					final int readTotalFinal = readTotal;
+					log("read() has so far received " + readTotal + " bytes: %s", () -> Pn532Utility.getByteHexString(buffer, startIndex, readTotalFinal));
+
+					if (readTotal >= length) { // Shouldn't happen, but >= for safety
 						return true;
 					}
 				}
@@ -84,11 +82,6 @@ public class Pn532Serial extends Pn532Connection<Serial> {
 	@Override
 	protected void preWrite() throws IOException {
 		io.drain();
-	}
-
-	@Override
-	protected void postWrite() throws IOException {
-		//io.flush(); // TODO from Java code
 	}
 
 	@Override

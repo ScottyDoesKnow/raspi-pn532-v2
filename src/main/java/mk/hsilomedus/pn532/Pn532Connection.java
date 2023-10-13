@@ -23,6 +23,7 @@ public abstract class Pn532Connection<T extends IO<T, ?, ?>> {
 	private static final byte PN532_TO_HOST = (byte) 0xD5;
 
 	private static final byte[] PN532_ACK = { 0, 0, (byte) 0xFF, 0, (byte) 0xFF, 0 };
+	protected static final byte[] PN532_NACK = { 0, 0, (byte) 0xFF, (byte) 0xFF, 0, 0 };
 
 	private int ackTimeout = DEFAULT_ACK_TIMEOUT;
 	private int readTimeout = DEFAULT_READ_TIMEOUT;
@@ -158,10 +159,10 @@ public abstract class Pn532Connection<T extends IO<T, ?, ?>> {
 		return writeCommand(header, new byte[0]);
 	}
 
-	protected Pn532TransferResult readAckFrame() throws InterruptedException {
+	protected Pn532TransferResult readAckFrame() throws InterruptedException, IOException {
 		var buffer = new byte[PN532_ACK.length];
 
-		if (!readFully(buffer, ackTimeout)) {
+		if (!read(buffer, 0, buffer.length, ackTimeout)) {
 			log("readAckFrame() timed out.");
 			return Pn532TransferResult.TIMEOUT;
 		}
@@ -175,19 +176,21 @@ public abstract class Pn532Connection<T extends IO<T, ?, ?>> {
 		return Pn532TransferResult.OK;
 	}
 
-	public int readResponse(byte[] buffer, int expectedLength, int timeout) throws InterruptedException, IOException {
-		log("readResponse(..., " + expectedLength + ", " + timeout + ")");
+	public int readResponse(byte[] buffer, int maxLength, int timeout) throws InterruptedException, IOException {
+		log("readResponse(..., " + maxLength + ", " + timeout + ")");
 
 		if (io == null) {
 			throw new IllegalStateException(prefixMessage("readResponse() called without calling begin()."));
 		} else if (buffer == null) {
 			throw new IllegalArgumentException(prefixMessage("readResponse() called with null buffer."));
+		} else if (buffer.length < maxLength) {
+			throw new IllegalArgumentException(prefixMessage("readResponse() called with buffer.length less than expectedLength."));
 		}
 
 		return Pn532Utility.wrapIoExceptionInterruptable(() -> {
-			var response = new byte[expectedLength + 2];
+			var response = new byte[maxLength + 9];
 
-			if (!readFully(response, timeout)) {
+			if (!read(response, 0, 5, timeout)) {
 				log("readResponse() timed out.");
 				return Pn532TransferResult.TIMEOUT.getValue();
 			}
@@ -206,16 +209,24 @@ public abstract class Pn532Connection<T extends IO<T, ?, ?>> {
 				return Pn532TransferResult.INVALID_FRAME.getValue();
 			}
 
+			length -= 2; // -2 for PN532_TO_HOST and command
+			if (length > maxLength) {
+				log("readResponse() received length greater than maxLength.");
+				return Pn532TransferResult.INSUFFICIENT_SPACE.getValue();
+			}
+			
+			postReadLength();
+			
+			// +4 for checksum and POSTAMBLE and previous -2
+			if (!read(response, 5, length + 4, timeout)) {
+				log("readResponse() timed out.");
+				return Pn532TransferResult.TIMEOUT.getValue();
+			}
+
 			byte command = (byte) (lastCommand + 1);
 			if (response[i++] != PN532_TO_HOST || response[i++] != command) {
 				log("readResponse() received bad command.");
 				return Pn532TransferResult.INVALID_FRAME.getValue();
-			}
-
-			length -= 2;
-			if (length > expectedLength) {
-				log("readResponse() received length greater than expectedLength.");
-				return Pn532TransferResult.INSUFFICIENT_SPACE.getValue();
 			}
 
 			byte sum = PN532_TO_HOST;
@@ -238,13 +249,13 @@ public abstract class Pn532Connection<T extends IO<T, ?, ?>> {
 			}
 
 			final int lengthFinal = length;
-			log("readResponse() returned " + length + " bytes: %s", () -> Pn532Utility.getByteHexString(buffer, lengthFinal));
+			log("readResponse() returned " + length + " bytes: %s", () -> Pn532Utility.getByteHexString(buffer, 0, lengthFinal));
 			return (int) length;
 		});
 	}
 
-	public int readResponse(byte[] buffer, int expectedLength) throws InterruptedException, IOException {
-		return readResponse(buffer, expectedLength, readTimeout);
+	public int readResponse(byte[] buffer, int maxLength) throws InterruptedException, IOException {
+		return readResponse(buffer, maxLength, readTimeout);
 	}
 
 	public void close() {
@@ -257,14 +268,17 @@ public abstract class Pn532Connection<T extends IO<T, ?, ?>> {
 
 	protected abstract T getInterface();
 
-	protected abstract void wakeupInternal() throws InterruptedException;
+	protected abstract void wakeupInternal() throws InterruptedException, IOException;
 
-	protected abstract boolean readFully(byte[] buffer, int timeout) throws InterruptedException;
+	protected abstract boolean read(byte[] buffer, int startIndex, int length, int timeout) throws InterruptedException, IOException;
 
 	protected void preWrite() throws InterruptedException {
 	}
 
 	protected void postWrite() throws InterruptedException {
+	}
+	
+	protected void postReadLength() throws IOException {
 	}
 
 	protected abstract void ioWrite(ByteBuffer buffer);

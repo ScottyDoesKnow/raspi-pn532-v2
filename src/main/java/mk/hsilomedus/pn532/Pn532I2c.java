@@ -9,10 +9,10 @@ import com.pi4j.io.i2c.I2CProvider;
 
 public class Pn532I2c extends Pn532Connection<I2C> {
 
-	public static final String PROVIDER_LINUXFS = "linuxfs-i2c";
 	public static final String PROVIDER_PIGPIO = "pigpio-i2c";
+	public static final String PROVIDER_LINUXFS = "linuxfs-i2c";
 
-	public static final String DEFAULT_PROVIDER = PROVIDER_LINUXFS;
+	public static final String DEFAULT_PROVIDER = PROVIDER_PIGPIO;
 	public static final int DEFAULT_BUS = 1;
 	public static final int DEFAULT_DEVICE = 0x24;
 
@@ -56,14 +56,15 @@ public class Pn532I2c extends Pn532Connection<I2C> {
 	}
 
 	@Override
-	protected boolean readFully(byte[] buffer, int timeout) throws InterruptedException, IOException {
-		var bufferTemp = new byte[buffer.length + 1];
+	protected boolean read(byte[] buffer, int startIndex, int length, int timeout) throws InterruptedException, IOException {
+		// I2C ignores startIndex and re-reads everything
+		var bufferTemp = new byte[startIndex + length + 1];
 
 		long end = System.currentTimeMillis() + timeout;
 		while (true) {
 			if (io.read(bufferTemp, bufferTemp.length) == bufferTemp.length && (bufferTemp[0] & 1) != 0) {
-				System.arraycopy(bufferTemp, 1, buffer, 0, buffer.length);
-				log("readFully() received " + buffer.length + " bytes: %s", () -> Pn532Utility.getByteHexString(buffer));
+				System.arraycopy(bufferTemp, 1 + startIndex, buffer, startIndex, length);
+				log("read() received " + length + " bytes: %s", () -> Pn532Utility.getByteHexString(buffer, startIndex, length));
 				return true;
 			}
 
@@ -72,6 +73,11 @@ public class Pn532I2c extends Pn532Connection<I2C> {
 				return false;
 			}
 		}
+	}
+	
+	@Override
+	protected void postReadLength() throws IOException {
+		io.write(PN532_NACK);
 	}
 
 	@Override
