@@ -90,7 +90,8 @@ public LockController() throws IOException {
         }
     });
 }
-
+```
+```
 private void runMotor(boolean cw) throws IOException {
     Pn532Utility.wrapIoException(() -> {
         int stepIndex = 0;
@@ -110,7 +111,8 @@ private void runMotor(boolean cw) throws IOException {
         }
     });
 }
-
+```
+```
 Pn532Utility.setLogger(logger);
 ```
 
