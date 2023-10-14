@@ -11,7 +11,13 @@ public class Pn532Serial extends Pn532Connection<Serial> {
 	public static final String DEFAULT_PROVIDER = "pigpio-serial";
 	public static final String DEFAULT_DEVICE = "/dev/ttyAMA0";
 
-	private static final byte[] WAKUEP = { 0x55, 0x55, 0, 0, 0 };
+	// TODO
+	// The serial connection will not wake up without this, I have no idea why
+	// Originally this was just the first 5 bytes. Now we're sending a lot more 0s and a COMMAND_SAM_CONFIG
+	// Sending a different command without side effects like COMMAND_GET_FW_VERSION doesn't seem to work
+	// https://stackoverflow.com/a/61220607/22663657
+	private static final byte[] WAKEUP = { 0x55, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, (byte) 0xFF, 0x03, (byte) 0xFD, (byte) 0xD4, 0x14, 0x01, 0x17, 0x00 };
 
 	private final String device;
 
@@ -45,8 +51,9 @@ public class Pn532Serial extends Pn532Connection<Serial> {
 	}
 
 	@Override
-	protected void wakeupInternal() throws IOException {
-		io.write(WAKUEP);
+	protected void wakeupInternal() throws InterruptedException, IOException {
+		log("wakeupInternal() sending %s", () -> Pn532Utility.getByteHexString(WAKEUP));
+		io.write(WAKEUP);
 		io.drain();
 	}
 

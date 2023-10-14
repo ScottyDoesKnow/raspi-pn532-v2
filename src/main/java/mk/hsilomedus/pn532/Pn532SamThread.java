@@ -57,7 +57,7 @@ public class Pn532SamThread<T extends IO<T, ?, ?>> extends Thread {
 				println(pn532, "getFirmwareVersion() returned " + Pn532TransferResult.fromValue((int) version));
 				return;
 			}
-			println(pn532, "found.");
+			println(pn532, "device found.");
 
 			// Configure board to read RFID tags
 			try {
@@ -70,7 +70,7 @@ public class Pn532SamThread<T extends IO<T, ?, ?>> extends Thread {
 				handleInterruptedException(e);
 				return;
 			}
-			println(pn532, "running.");
+			println(pn532, "configured for SAM and running.");
 
 			var buffer = new byte[10]; // UID should be max 10 bytes
 			while (!closed) {

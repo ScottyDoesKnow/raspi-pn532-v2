@@ -13,12 +13,14 @@ public class Pn532Spi extends Pn532Connection<Spi> {
 
 	public static final String PROVIDER_DO_PIGPIO = "pigpio-digital-output";
 	public static final String PROVIDER_DO_LINUXFS = "linuxfs-digital-output";
+	
+	public static final int CS_PIN_CE0 = 8;
+	public static final int CS_PIN_CE1 = 7;
 
 	public static final String DEFAULT_PROVIDER = "pigpio-spi";
 	public static final String DEFAULT_PROVIDER_DO = PROVIDER_DO_PIGPIO;
-	public static final int DEFAULT_CHANNEL = 0; // TODO was 1
-	public static final int CS_PIN_CE0 = 8;
-	public static final int CS_PIN_CE1 = 7;
+	public static final int DEFAULT_CHANNEL = 0;
+	public static final int DEFAULT_CS_PIN = CS_PIN_CE0;
 
 	private static final byte SPI_READY = 0x01;
 	private static final byte SPI_DATA_WRITE = 0x01;
@@ -33,10 +35,10 @@ public class Pn532Spi extends Pn532Connection<Spi> {
 
 	/**
 	 * Defaults to {@link Pn532Spi#DEFAULT_PROVIDER}, {@link Pn532Spi#DEFAULT_PROVIDER_DO},
-	 *  {@link Pn532Spi#DEFAULT_CHANNEL}, and {@link Pn532Spi#CS_PIN_CE0}.
+	 *  {@link Pn532Spi#DEFAULT_CHANNEL}, and {@link Pn532Spi#DEFAULT_CS_PIN}.
 	 */
 	public Pn532Spi() {
-		this(DEFAULT_PROVIDER, DEFAULT_PROVIDER_DO, DEFAULT_CHANNEL, CS_PIN_CE0);
+		this(DEFAULT_PROVIDER, DEFAULT_PROVIDER_DO, DEFAULT_CHANNEL, DEFAULT_CS_PIN);
 	}
 
 	/**
@@ -65,11 +67,7 @@ public class Pn532Spi extends Pn532Connection<Spi> {
 				.baud(Spi.DEFAULT_BAUD)
 				.build();
 		SpiProvider spiProvider = pi4j.provider(provider);
-		var spi = spiProvider.create(config);
-
-		// TODO csOutput was created here in Java code
-
-		return spi;
+		return spiProvider.create(config);
 	}
 
 	@Override
@@ -78,11 +76,9 @@ public class Pn532Spi extends Pn532Connection<Spi> {
 		csLow();
 		csOutput.high();
 	}
-
+	
 	@Override
-	protected boolean read(byte[] buffer, int startIndex, int length, int timeout) throws InterruptedException, IOException {
-		int readTotal = 0;
-
+	protected boolean preRead(int timeout) throws InterruptedException, IOException {
 		long end = System.currentTimeMillis() + timeout;
 		while (true) {
 			if (!isReady()) {
@@ -93,33 +89,45 @@ public class Pn532Spi extends Pn532Connection<Spi> {
 			} else {
 				csLow();
 				writeByte(SPI_DATA_READ, true);
-
-				try {
-					while (true) {
-						int read = io.read(buffer, startIndex + readTotal, buffer.length - startIndex - readTotal); // Processed in finally
-
-						if (read > 0) {
-							readTotal += read;
-							final int readTotalFinal = readTotal;
-							log("read() has so far received " + readTotal + " (reversed) bytes: %s",
-									() -> Pn532Utility.getByteHexString(buffer, startIndex, readTotalFinal));
-
-							if (readTotal >= length) { // Shouldn't happen, but >= for safety
-								return true;
-							}
-						}
-
-						Thread.sleep(10);
-						if (System.currentTimeMillis() > end) {
-							return false;
-						}
-					}
-				} finally {
-					csOutput.high();
-					reverseBytes(buffer);
-				}
+				return true;
 			}
 		}
+	}
+
+	@Override
+	protected boolean read(byte[] buffer, int startIndex, int length, int timeout) throws InterruptedException, IOException {
+		int readTotal = 0;
+
+		long end = System.currentTimeMillis() + timeout;
+		while (true) {
+			try {
+				while (true) {
+					int read = io.read(buffer, startIndex + readTotal, length - readTotal); // Processed in finally
+
+					if (read > 0) {
+						readTotal += read;
+						if (readTotal >= length) { // Shouldn't happen, but >= for safety
+							return true;
+						}
+					}
+
+					Thread.sleep(10);
+					if (System.currentTimeMillis() > end) {
+						return false;
+					}
+				}
+			} finally {
+				reverseBytes(buffer);
+				
+				final int readTotalFinal = readTotal;
+				log("read() received " + readTotal + " bytes: %s", () -> Pn532Utility.getByteHexString(buffer, startIndex, readTotalFinal));
+			}
+		}
+	}
+
+	@Override
+	protected void postRead() throws IOException {
+		csOutput.high();
 	}
 
 	@Override
@@ -168,7 +176,7 @@ public class Pn532Spi extends Pn532Connection<Spi> {
 
 	private void writeByte(byte value, boolean log) throws IOException {
 		if (log) {
-			log("writeByte() wrote " + String.format("%02X", value));
+			log("writeByte() sending " + String.format("%02X", value));
 		}
 
 		io.write(reverseByte(value));

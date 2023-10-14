@@ -22,8 +22,8 @@ public abstract class Pn532Connection<T extends IO<T, ?, ?>> {
 	private static final byte HOST_TO_PN532 = (byte) 0xD4;
 	private static final byte PN532_TO_HOST = (byte) 0xD5;
 
-	private static final byte[] PN532_ACK = { 0, 0, (byte) 0xFF, 0, (byte) 0xFF, 0 };
-	protected static final byte[] PN532_NACK = { 0, 0, (byte) 0xFF, (byte) 0xFF, 0, 0 };
+	private static final byte[] PN532_ACK = { 0x00, 0x00, (byte) 0xFF, 0x00, (byte) 0xFF, 0x00 };
+	protected static final byte[] PN532_NACK = { 0x00, 0x00, (byte) 0xFF, (byte) 0xFF, 0x00, 0x00 };
 
 	private int ackTimeout = DEFAULT_ACK_TIMEOUT;
 	private int readTimeout = DEFAULT_READ_TIMEOUT;
@@ -161,11 +161,18 @@ public abstract class Pn532Connection<T extends IO<T, ?, ?>> {
 
 	protected Pn532TransferResult readAckFrame() throws InterruptedException, IOException {
 		var buffer = new byte[PN532_ACK.length];
-
-		if (!read(buffer, 0, buffer.length, ackTimeout)) {
-			log("readAckFrame() timed out.");
+		
+		if (!preRead(ackTimeout)) {
+			log("readAckFrame() pre-read timed out.");
 			return Pn532TransferResult.TIMEOUT;
 		}
+
+		if (!read(buffer, 0, buffer.length, ackTimeout)) {
+			log("readAckFrame() read timed out.");
+			return Pn532TransferResult.TIMEOUT;
+		}
+		
+		postRead();
 
 		if (!Arrays.equals(buffer, PN532_ACK)) {
 			log("readAckFrame() was invalid.");
@@ -176,6 +183,7 @@ public abstract class Pn532Connection<T extends IO<T, ?, ?>> {
 		return Pn532TransferResult.OK;
 	}
 
+	// TODO timeout isn't very accurate, uses it multiple times
 	public int readResponse(byte[] buffer, int maxLength, int timeout) throws InterruptedException, IOException {
 		log("readResponse(..., " + maxLength + ", " + timeout + ")");
 
@@ -184,14 +192,19 @@ public abstract class Pn532Connection<T extends IO<T, ?, ?>> {
 		} else if (buffer == null) {
 			throw new IllegalArgumentException(prefixMessage("readResponse() called with null buffer."));
 		} else if (buffer.length < maxLength) {
-			throw new IllegalArgumentException(prefixMessage("readResponse() called with buffer.length less than expectedLength."));
+			throw new IllegalArgumentException(prefixMessage("readResponse() called with buffer.length less than maxLength."));
 		}
 
 		return Pn532Utility.wrapIoExceptionInterruptable(() -> {
 			var response = new byte[maxLength + 9];
+			
+			if (!preRead(timeout)) {
+				log("readResponse() pre-read timed out.");
+				return Pn532TransferResult.TIMEOUT.getValue();
+			}
 
 			if (!read(response, 0, 5, timeout)) {
-				log("readResponse() timed out.");
+				log("readResponse() first read timed out.");
 				return Pn532TransferResult.TIMEOUT.getValue();
 			}
 
@@ -215,17 +228,19 @@ public abstract class Pn532Connection<T extends IO<T, ?, ?>> {
 				return Pn532TransferResult.INSUFFICIENT_SPACE.getValue();
 			}
 			
-			postReadLength();
+			preSubsequentRead();
 			
 			// +4 for checksum and POSTAMBLE and previous -2
 			if (!read(response, 5, length + 4, timeout)) {
-				log("readResponse() timed out.");
+				log("readResponse() second read timed out.");
 				return Pn532TransferResult.TIMEOUT.getValue();
 			}
+			
+			postRead();
 
 			byte command = (byte) (lastCommand + 1);
 			if (response[i++] != PN532_TO_HOST || response[i++] != command) {
-				log("readResponse() received bad command.");
+				log("readResponse() received bad transfer direction or command.");
 				return Pn532TransferResult.INVALID_FRAME.getValue();
 			}
 
@@ -272,13 +287,20 @@ public abstract class Pn532Connection<T extends IO<T, ?, ?>> {
 
 	protected abstract boolean read(byte[] buffer, int startIndex, int length, int timeout) throws InterruptedException, IOException;
 
-	protected void preWrite() throws InterruptedException {
+	protected void preWrite() throws InterruptedException, IOException {
 	}
 
-	protected void postWrite() throws InterruptedException {
+	protected void postWrite() throws IOException {
+	}
+
+	protected boolean preRead(int timeout) throws InterruptedException, IOException {
+		return true;
 	}
 	
-	protected void postReadLength() throws IOException {
+	protected void preSubsequentRead() throws IOException {
+	}
+
+	protected void postRead() throws IOException {
 	}
 
 	protected abstract void ioWrite(ByteBuffer buffer);

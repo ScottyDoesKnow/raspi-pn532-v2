@@ -76,7 +76,8 @@ public class Pn532I2c extends Pn532Connection<I2C> {
 	}
 	
 	@Override
-	protected void postReadLength() throws IOException {
+	protected void preSubsequentRead() throws IOException {
+		log("preSubsequentRead() sending %s", () -> Pn532Utility.getByteHexString(PN532_NACK));
 		io.write(PN532_NACK);
 	}
 
