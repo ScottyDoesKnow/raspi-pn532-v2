@@ -6,8 +6,8 @@ class MainListener implements Pn532SamThreadListener {
 
 	public void run() {
 		(new Pn532SamThread<>(this, new Pn532I2c())).run();
-		//(new PN532SamThread<>(this, new PN532Serial())).run();
-		//(new PN532SamThread<>(this, new PN532Spi())).run();
+		//(new Pn532SamThread<>(this, new Pn532Serial())).run();
+		//(new Pn532SamThread<>(this, new Pn532Spi())).run();
 	}
 
 	@Override

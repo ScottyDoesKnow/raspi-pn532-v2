@@ -23,7 +23,6 @@ public abstract class Pn532Connection<T extends IO<T, ?, ?>> {
 	private static final byte PN532_TO_HOST = (byte) 0xD5;
 
 	private static final byte[] PN532_ACK = { 0x00, 0x00, (byte) 0xFF, 0x00, (byte) 0xFF, 0x00 };
-	protected static final byte[] PN532_NACK = { 0x00, 0x00, (byte) 0xFF, (byte) 0xFF, 0x00, 0x00 };
 
 	private int ackTimeout = DEFAULT_ACK_TIMEOUT;
 	private int readTimeout = DEFAULT_READ_TIMEOUT;
@@ -161,17 +160,18 @@ public abstract class Pn532Connection<T extends IO<T, ?, ?>> {
 
 	protected Pn532TransferResult readAckFrame() throws InterruptedException, IOException {
 		var buffer = new byte[PN532_ACK.length];
-		
-		if (!preRead(ackTimeout)) {
+
+		long end = System.currentTimeMillis() + ackTimeout;
+		if (!preRead(end)) {
 			log("readAckFrame() pre-read timed out.");
 			return Pn532TransferResult.TIMEOUT;
 		}
 
-		if (!read(buffer, 0, buffer.length, ackTimeout)) {
+		if (!read(buffer, 0, buffer.length, end)) {
 			log("readAckFrame() read timed out.");
 			return Pn532TransferResult.TIMEOUT;
 		}
-		
+
 		postRead();
 
 		if (!Arrays.equals(buffer, PN532_ACK)) {
@@ -183,7 +183,9 @@ public abstract class Pn532Connection<T extends IO<T, ?, ?>> {
 		return Pn532TransferResult.OK;
 	}
 
-	// TODO timeout isn't very accurate, uses it multiple times
+	/**
+	 * @return the number of bytes read if successful, or a {@link Pn532TransferResult} value otherwise.
+	 */
 	public int readResponse(byte[] buffer, int maxLength, int timeout) throws InterruptedException, IOException {
 		log("readResponse(..., " + maxLength + ", " + timeout + ")");
 
@@ -197,13 +199,14 @@ public abstract class Pn532Connection<T extends IO<T, ?, ?>> {
 
 		return Pn532Utility.wrapIoExceptionInterruptable(() -> {
 			var response = new byte[maxLength + 9];
-			
-			if (!preRead(timeout)) {
+
+			long end = System.currentTimeMillis() + timeout;
+			if (!preRead(end)) {
 				log("readResponse() pre-read timed out.");
 				return Pn532TransferResult.TIMEOUT.getValue();
 			}
 
-			if (!read(response, 0, 5, timeout)) {
+			if (!read(response, 0, 5, end)) {
 				log("readResponse() first read timed out.");
 				return Pn532TransferResult.TIMEOUT.getValue();
 			}
@@ -227,15 +230,15 @@ public abstract class Pn532Connection<T extends IO<T, ?, ?>> {
 				log("readResponse() received length greater than maxLength.");
 				return Pn532TransferResult.INSUFFICIENT_SPACE.getValue();
 			}
-			
+
 			preSubsequentRead();
-			
+
 			// +4 for checksum and POSTAMBLE and previous -2
-			if (!read(response, 5, length + 4, timeout)) {
+			if (!read(response, 5, length + 4, end)) {
 				log("readResponse() second read timed out.");
 				return Pn532TransferResult.TIMEOUT.getValue();
 			}
-			
+
 			postRead();
 
 			byte command = (byte) (lastCommand + 1);
@@ -269,6 +272,9 @@ public abstract class Pn532Connection<T extends IO<T, ?, ?>> {
 		});
 	}
 
+	/**
+	 * @return the number of bytes read if successful, or a {@link Pn532TransferResult} value otherwise.
+	 */
 	public int readResponse(byte[] buffer, int maxLength) throws InterruptedException, IOException {
 		return readResponse(buffer, maxLength, readTimeout);
 	}
@@ -285,7 +291,7 @@ public abstract class Pn532Connection<T extends IO<T, ?, ?>> {
 
 	protected abstract void wakeupInternal() throws InterruptedException, IOException;
 
-	protected abstract boolean read(byte[] buffer, int startIndex, int length, int timeout) throws InterruptedException, IOException;
+	protected abstract boolean read(byte[] buffer, int startIndex, int length, long timeoutEnd) throws InterruptedException, IOException;
 
 	protected void preWrite() throws InterruptedException, IOException {
 	}
@@ -293,10 +299,10 @@ public abstract class Pn532Connection<T extends IO<T, ?, ?>> {
 	protected void postWrite() throws IOException {
 	}
 
-	protected boolean preRead(int timeout) throws InterruptedException, IOException {
+	protected boolean preRead(long timeoutEnd) throws InterruptedException, IOException {
 		return true;
 	}
-	
+
 	protected void preSubsequentRead() throws IOException {
 	}
 

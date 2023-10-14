@@ -11,7 +11,6 @@ public class Pn532Serial extends Pn532Connection<Serial> {
 	public static final String DEFAULT_PROVIDER = "pigpio-serial";
 	public static final String DEFAULT_DEVICE = "/dev/ttyAMA0";
 
-	// TODO
 	// The serial connection will not wake up without this, I have no idea why
 	// Originally this was just the first 5 bytes. Now we're sending a lot more 0s and a COMMAND_SAM_CONFIG
 	// Sending a different command without side effects like COMMAND_GET_FW_VERSION doesn't seem to work
@@ -58,10 +57,8 @@ public class Pn532Serial extends Pn532Connection<Serial> {
 	}
 
 	@Override
-	protected boolean read(byte[] buffer, int startIndex, int length, int timeout) throws InterruptedException, IOException {
+	protected boolean read(byte[] buffer, int startIndex, int length, long timeoutEnd) throws InterruptedException, IOException {
 		int readTotal = 0;
-
-		long end = System.currentTimeMillis() + timeout;
 		while (true) {
 			int available = io.available();
 			if (available > 0) {
@@ -80,7 +77,7 @@ public class Pn532Serial extends Pn532Connection<Serial> {
 			}
 
 			Thread.sleep(10);
-			if (System.currentTimeMillis() > end) {
+			if (System.currentTimeMillis() > timeoutEnd) {
 				return false;
 			}
 		}

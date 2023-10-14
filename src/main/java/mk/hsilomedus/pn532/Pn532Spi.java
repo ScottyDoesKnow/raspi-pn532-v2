@@ -8,12 +8,11 @@ import com.pi4j.io.gpio.digital.DigitalOutputProvider;
 import com.pi4j.io.spi.Spi;
 import com.pi4j.io.spi.SpiProvider;
 
-// TODO Don't know what's up with the whole reset pin thing from the Java code
 public class Pn532Spi extends Pn532Connection<Spi> {
 
 	public static final String PROVIDER_DO_PIGPIO = "pigpio-digital-output";
 	public static final String PROVIDER_DO_LINUXFS = "linuxfs-digital-output";
-	
+
 	public static final int CS_PIN_CE0 = 8;
 	public static final int CS_PIN_CE1 = 7;
 
@@ -42,8 +41,8 @@ public class Pn532Spi extends Pn532Connection<Spi> {
 	}
 
 	/**
-	 * @param channel The SPI channel to use. Common values are 0 and 1.
-	 * @param csPin The Chip Select Pin to use. Common values are {@link Pn532Spi#CS_PIN_CE0}
+	 * @param channel the SPI channel to use. Common values are 0 and 1.
+	 * @param csPin the Chip Select pin to use. Common values are {@link Pn532Spi#CS_PIN_CE0}
 	 *     and {@link Pn532Spi#CS_PIN_CE1}, but any GPIO can be used.
 	 */
 	public Pn532Spi(String provider, String providerDo, int channel, int csPin) {
@@ -72,18 +71,16 @@ public class Pn532Spi extends Pn532Connection<Spi> {
 
 	@Override
 	protected void wakeupInternal() throws InterruptedException, IOException {
-		// TODO Was high and then low in Java code
 		csLow();
 		csOutput.high();
 	}
-	
+
 	@Override
-	protected boolean preRead(int timeout) throws InterruptedException, IOException {
-		long end = System.currentTimeMillis() + timeout;
+	protected boolean preRead(long timeoutEnd) throws InterruptedException, IOException {
 		while (true) {
 			if (!isReady()) {
 				Thread.sleep(10);
-				if (System.currentTimeMillis() > end) {
+				if (System.currentTimeMillis() > timeoutEnd) {
 					return false;
 				}
 			} else {
@@ -95,10 +92,8 @@ public class Pn532Spi extends Pn532Connection<Spi> {
 	}
 
 	@Override
-	protected boolean read(byte[] buffer, int startIndex, int length, int timeout) throws InterruptedException, IOException {
+	protected boolean read(byte[] buffer, int startIndex, int length, long timeoutEnd) throws InterruptedException, IOException {
 		int readTotal = 0;
-
-		long end = System.currentTimeMillis() + timeout;
 		while (true) {
 			try {
 				while (true) {
@@ -112,13 +107,13 @@ public class Pn532Spi extends Pn532Connection<Spi> {
 					}
 
 					Thread.sleep(10);
-					if (System.currentTimeMillis() > end) {
+					if (System.currentTimeMillis() > timeoutEnd) {
 						return false;
 					}
 				}
 			} finally {
 				reverseBytes(buffer);
-				
+
 				final int readTotalFinal = readTotal;
 				log("read() received " + readTotal + " bytes: %s", () -> Pn532Utility.getByteHexString(buffer, startIndex, readTotalFinal));
 			}
@@ -182,16 +177,17 @@ public class Pn532Spi extends Pn532Connection<Spi> {
 		io.write(reverseByte(value));
 	}
 
-	// TODO From the Java code, should try to understand and maybe optimize this
+	// https://www.geeksforgeeks.org/reverse-actual-bits-given-number/
 	private byte reverseByte(byte value) {
 		byte input = value;
-		byte output = 0;
 
+		byte output = 0;
 		for (int i = 0; i < 8; i++) {
+			output <<= 1;
 			if ((input & 0x01) > 0) {
-				output |= 1 << (7 - i);
+				output ^= 1;
 			}
-			input = (byte) (input >> 1);
+			input >>= 1;
 		}
 
 		return output;

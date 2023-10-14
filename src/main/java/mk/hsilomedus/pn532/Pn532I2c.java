@@ -16,6 +16,8 @@ public class Pn532I2c extends Pn532Connection<I2C> {
 	public static final int DEFAULT_BUS = 1;
 	public static final int DEFAULT_DEVICE = 0x24;
 
+	private static final byte[] PN532_NACK = { 0x00, 0x00, (byte) 0xFF, (byte) 0xFF, 0x00, 0x00 };
+
 	private final int bus;
 	private final int device;
 
@@ -27,7 +29,7 @@ public class Pn532I2c extends Pn532Connection<I2C> {
 	}
 
 	/**
-	 * @param provider The provider to use. Options are {@link Pn532I2c#PROVIDER_LINUXFS} or {@link Pn532I2c#PROVIDER_PIGPIO}.
+	 * @param provider the provider to use. Options are {@link Pn532I2c#PROVIDER_LINUXFS} or {@link Pn532I2c#PROVIDER_PIGPIO}.
 	 */
 	public Pn532I2c(String provider, int bus, int device) {
 		super(provider, "i2c-" + bus + "-0x" + Integer.toHexString(device),
@@ -56,11 +58,9 @@ public class Pn532I2c extends Pn532Connection<I2C> {
 	}
 
 	@Override
-	protected boolean read(byte[] buffer, int startIndex, int length, int timeout) throws InterruptedException, IOException {
+	protected boolean read(byte[] buffer, int startIndex, int length, long timeoutEnd) throws InterruptedException, IOException {
 		// I2C ignores startIndex and re-reads everything
 		var bufferTemp = new byte[startIndex + length + 1];
-
-		long end = System.currentTimeMillis() + timeout;
 		while (true) {
 			if (io.read(bufferTemp, bufferTemp.length) == bufferTemp.length && (bufferTemp[0] & 1) != 0) {
 				System.arraycopy(bufferTemp, 1 + startIndex, buffer, startIndex, length);
@@ -69,12 +69,12 @@ public class Pn532I2c extends Pn532Connection<I2C> {
 			}
 
 			Thread.sleep(10);
-			if (System.currentTimeMillis() > end) {
+			if (System.currentTimeMillis() > timeoutEnd) {
 				return false;
 			}
 		}
 	}
-	
+
 	@Override
 	protected void preSubsequentRead() throws IOException {
 		log("preSubsequentRead() sending %s", () -> Pn532Utility.getByteHexString(PN532_NACK));

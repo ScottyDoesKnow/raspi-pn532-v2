@@ -49,7 +49,9 @@ public class Pn532<T extends IO<T, ?, ?>> implements AutoCloseable {
 		log("initialize() successful.");
 	}
 
-	// TODO comment public methods, especially return values of this and readResponse
+	/**
+	 * @return the firmware version of the device if successful, or a {@link Pn532TransferResult} value otherwise.
+	 */
 	public long getFirmwareVersion() throws InterruptedException, IOException {
 		log("getFirmwareVersion()");
 
