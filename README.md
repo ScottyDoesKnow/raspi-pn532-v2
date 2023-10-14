@@ -36,12 +36,12 @@ Your class will need to implement Pn532SamThreadListener and its methods.
 ```
 @Override
 public void receiveMessage(String message) {
-	System.out.println(message);
+    System.out.println(message);
 }
 
 @Override
 public void uidReceived(String displayName, byte[] uid) {
-	System.out.println(displayName + ": UID '" + Pn532SamThreadListener.getUidString(uid) + "' received.");
+    System.out.println(displayName + ": UID '" + Pn532SamThreadListener.getUidString(uid) + "' received.");
 }
 ```
 
@@ -60,16 +60,16 @@ Stop the Pn532SamThread thread when you're done:
 ```
 @SuppressWarnings("rawtypes")
 private void closeThread(Pn532SamThread thread) {
-	if (thread != null && thread.isAlive()) {
-		thread.close();
+    if (thread != null && thread.isAlive()) {
+        thread.close();
 
-		try {
-			thread.join();
-		} catch (InterruptedException e) {
-			log("Error closing thread: " + e.getMessage());
-			handleInterruptedException(e);
-		}
-	}
+        try {
+            thread.join();
+        } catch (InterruptedException e) {
+            log("Error closing thread: " + e.getMessage());
+            handleInterruptedException(e);
+        }
+    }
 }
 ```
 
@@ -81,34 +81,34 @@ Pn532ContextHelper.shutdown();
 You can also use the Pn532Utility methods in your own code to better handle the random RuntimeExceptions that come out of Pi4J and for logging.
 ```
 public LockController() throws IOException {
-	Pn532Utility.wrapInitializationExceptions(() -> {
-		var pi4j = Pn532ContextHelper.getContext();
-		DigitalOutputProvider provider = pi4j.provider("pigpio-digital-output");
-		for (int i = 0; i < outputs.length; i++) {
-			outputs[i] = provider.create(DigitalOutput.newConfigBuilder(pi4j).address(PIN_IDS[i]).build());
-			outputs[i].state(DigitalState.LOW);
-		}
-	});
+    Pn532Utility.wrapInitializationExceptions(() -> {
+        var pi4j = Pn532ContextHelper.getContext();
+        DigitalOutputProvider provider = pi4j.provider("pigpio-digital-output");
+        for (int i = 0; i < outputs.length; i++) {
+            outputs[i] = provider.create(DigitalOutput.newConfigBuilder(pi4j).address(PIN_IDS[i]).build());
+            outputs[i].state(DigitalState.LOW);
+        }
+    });
 }
 
 private void runMotor(boolean cw) throws IOException {
-	Pn532Utility.wrapIoException(() -> {
-		int stepIndex = 0;
-		for (int i = 0; i < STEPS; i++) {
-			for (int j = 0; j < outputs.length; j++) {
-				outputs[j].state(STEP_SEQUENCE_FULL[stepIndex][j] ? DigitalState.HIGH : DigitalState.LOW);
-			}
-			stepIndex += cw ? -1 : 1;
-			stepIndex = Math.floorMod(stepIndex, STEP_SEQUENCE_FULL.length);
-			
-			long target = System.nanoTime() + STEP_SLEEP;
-			while (System.nanoTime() < target);
-		}
-		
-		for (var output : outputs) {
-			output.low();
-		}
-	});
+    Pn532Utility.wrapIoException(() -> {
+        int stepIndex = 0;
+        for (int i = 0; i < STEPS; i++) {
+            for (int j = 0; j < outputs.length; j++) {
+                outputs[j].state(STEP_SEQUENCE_FULL[stepIndex][j] ? DigitalState.HIGH : DigitalState.LOW);
+            }
+            stepIndex += cw ? -1 : 1;
+            stepIndex = Math.floorMod(stepIndex, STEP_SEQUENCE_FULL.length);
+            
+            long target = System.nanoTime() + STEP_SLEEP;
+            while (System.nanoTime() < target);
+        }
+        
+        for (var output : outputs) {
+            output.low();
+        }
+    });
 }
 
 Pn532Utility.setLogger(logger);
