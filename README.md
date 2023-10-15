@@ -66,8 +66,8 @@ private void closeThread(Pn532SamThread thread) {
         try {
             thread.join();
         } catch (InterruptedException e) {
-            log("Error closing thread: " + e.getMessage());
-            handleInterruptedException(e);
+            System.out.println("Error closing thread: " + e.getMessage());
+            Thread.currentThread().interrupt();
         }
     }
 }
