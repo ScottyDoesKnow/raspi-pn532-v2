@@ -25,11 +25,18 @@ PN532-1.6 SPI Channel 0, CS Pin 8: UID '<redacted>' received.
 * Added Pn532SamThread to make usage simple
 * Added Pn532Utility for logging and exception handling
 * Added Pn532ContextHelper
+* Added Main/MainListener to provide example implementation
 
 ## Notes/issues/etc...
 * sudo is required unless you're using I2C with the linuxfs-i2c provider.
 * To get the Serial wakeup working, it sends a SAM config command immediately. I don't know why but I can't currently find a way around that.
 * I've read in some places that you should not power your PN532 from an external 5V power supply and then connect it to the 3.3V GPIO pins. I honestly don't understand enough about it to know whether it's a real issue, but my setup does it anyway and we'll see if I blow up my Pi. More information below.
+
+## Example Implementation
+Releases include a runnable jar which will run a Pn532SamThread for each connection type with default parameters.
+```
+sudo java -jar raspi-pn532-v2-1.0.0.jar
+```
 
 ## Library Usage
 Your class will need to implement Pn532SamThreadListener and its methods.
@@ -66,8 +73,8 @@ private void closeThread(Pn532SamThread thread) {
         try {
             thread.join();
         } catch (InterruptedException e) {
-            log("Error closing thread: " + e.getMessage());
-            handleInterruptedException(e);
+            System.out.println("Error closing thread: " + e.getMessage());
+            Thread.currentThread().interrupt();
         }
     }
 }
