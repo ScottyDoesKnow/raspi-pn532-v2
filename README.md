@@ -23,13 +23,13 @@ PN532-1.6 SPI Channel 0, CS Pin 8: UID '<redacted>' received.
 * Major refactoring to clean up the code and make it much easier to understand and use
 * All connection methods are working, there was a bug in the Serial receive method in the raspi-pn532 library
 * Added Pn532SamThread to make usage simple
+* Added Main/MainListener to provide example implementation
 * Added Pn532Utility for logging and exception handling
 * Added Pn532ContextHelper
-* Added Main/MainListener to provide example implementation
 
 ## Notes/issues/etc...
 * sudo is required unless you're using I2C with the linuxfs-i2c provider.
-* To get the Serial wakeup working, it sends a SAM config command immediately. I don't know why but I can't currently find a way around that.
+* To get the Serial wakeup working, it sends a SAM config command immediately. I don't know why this is required but I can't currently find a way around that.
 * I've read in some places that you should not power your PN532 from an external 5V power supply and then connect it to the 3.3V GPIO pins. I honestly don't understand enough about it to know whether it's a real issue, but my setup does it anyway and we'll see if I blow up my Pi. More information below.
 
 ## Example Implementation
