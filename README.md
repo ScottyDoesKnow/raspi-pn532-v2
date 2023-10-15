@@ -39,6 +39,8 @@ sudo java -jar raspi-pn532-v2-1.0.0.jar
 ```
 
 ## Library Usage
+Note: I used eclipse 2022-06 for development to allow me to use Java 11 (jdk-11.10.16.8-hotspot specifically).
+
 Your class will need to implement Pn532SamThreadListener and its methods.
 ```
 @Override
