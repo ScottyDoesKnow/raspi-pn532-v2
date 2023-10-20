@@ -35,7 +35,7 @@ PN532-1.6 SPI Channel 0, CS Pin 8: UID '<redacted>' received.
 ## Example Implementation
 Releases include a runnable jar which will run a Pn532SamThread for each connection type with default parameters.
 ```
-sudo java -jar raspi-pn532-v2-1.0.0.jar
+sudo java -jar raspi-pn532-v2-1.0.1.jar
 ```
 
 ## Library Usage
