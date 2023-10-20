@@ -10,9 +10,11 @@ public class Pn532<T extends IO<T, ?, ?>> implements AutoCloseable {
 	private static final byte COMMAND_GET_FW_VERSION = 0x02;
 	private static final byte COMMAND_SAM_CONFIG = 0x14;
 	private static final byte COMMAND_IN_LIST_PASSIVE_TARGET = 0x4A;
+	
+	private static final byte MIFARE_ISO14443A_BAUD_RATE = 0x00;
 
 	private final Pn532Connection<T> connection;
-	private final byte[] buffer = new byte[16];
+	private final byte[] buffer = new byte[64];
 
 	public int getAckTimeout() {
 		return connection.getAckTimeout();
@@ -115,13 +117,13 @@ public class Pn532<T extends IO<T, ?, ?>> implements AutoCloseable {
 		}
 	}
 
-	public int readPassiveTargetId(byte cardBaudRate, byte[] result) throws InterruptedException, IOException {
+	public int readPassiveTargetId(byte[] result) throws InterruptedException, IOException {
 		log("readPassiveTargetId()");
 
 		var command = new byte[3];
 		command[0] = COMMAND_IN_LIST_PASSIVE_TARGET;
 		command[1] = 1; // Max 1 cards at once (we can set this to 2 later) - comment from C++ code
-		command[2] = cardBaudRate;
+		command[2] = MIFARE_ISO14443A_BAUD_RATE;
 
 		Pn532TransferResult writeStatus = connection.writeCommand(command);
 		if (writeStatus != Pn532TransferResult.OK) {
@@ -129,8 +131,8 @@ public class Pn532<T extends IO<T, ?, ?>> implements AutoCloseable {
 			return writeStatus.getValue();
 		}
 
-		// 16 because uidLength should be max 10
-		int responseStatus = connection.readResponse(buffer, 16);
+		// uidLength should be max 10 which means we only need 16 bytes, but an Android phone I tested with returned 33 bytes, so who knows
+		int responseStatus = connection.readResponse(buffer, 64);
 		if (responseStatus < 0) {
 			log("readPassiveTargetId() readResponse returned " + Pn532TransferResult.fromValue(responseStatus));
 			return responseStatus;
@@ -165,7 +167,7 @@ public class Pn532<T extends IO<T, ?, ?>> implements AutoCloseable {
 			result[i] = buffer[6 + i];
 		}
 
-		log("readPassiveTargetId() returned %s", () -> Pn532Utility.getByteHexString(result));
+		log("readPassiveTargetId() returned %s", () -> Pn532Utility.getByteHexString(result, 0, uidLength));
 		return uidLength;
 	}
 

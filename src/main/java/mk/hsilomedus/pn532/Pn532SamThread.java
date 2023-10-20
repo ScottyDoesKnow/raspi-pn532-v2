@@ -7,8 +7,6 @@ import com.pi4j.io.IO;
 
 public class Pn532SamThread<T extends IO<T, ?, ?>> extends Thread {
 
-	private static final byte MIFARE_ISO14443A = 0x00;
-
 	private final Pn532SamThreadListener listener;
 	private final Pn532Connection<T> connection;
 
@@ -76,7 +74,7 @@ public class Pn532SamThread<T extends IO<T, ?, ?>> extends Thread {
 			while (!closed) {
 				int length;
 				try {
-					length = pn532.readPassiveTargetId(MIFARE_ISO14443A, buffer);
+					length = pn532.readPassiveTargetId(buffer);
 				} catch (InterruptedException | IOException e) {
 					println(pn532, "readPassiveTargetId() error: " + e.getMessage());
 					handleInterruptedException(e);
