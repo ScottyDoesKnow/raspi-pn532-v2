@@ -2,7 +2,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>mk.hsilomedus</groupId>
 	<artifactId>raspi-pn532-v2</artifactId>
-	<version>1.0.0</version>
+	<version>1.0.1</version>
 
 	<build>
 		<sourceDirectory>src/main/java</sourceDirectory>
