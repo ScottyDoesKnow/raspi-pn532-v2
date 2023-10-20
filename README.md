@@ -140,7 +140,7 @@ I used an Elechouse PN532 NFC RFID Module V3 and a Raspberry Pi Zero. **There ma
 1. Make sure Java 11 or higher is installed, I installed OpenJDK 17 (sudo apt install openjdk-17-jre)
 
 ### Powering your PN532
-Raspberry Pi GPIO does not provide enough current (up to 150mA per PN532), so you'll need an external power supply. **As explained above, using a 5V power supply may not be safe for your Pi.**
+Raspberry Pi GPIO does not provide enough current (up to 150mA per PN532), so you'll need an external power supply. **As mentioned above, using a 5V power supply may not be safe for your Pi.**
 * https://raspberrypi.stackexchange.com/a/82221
 * https://raspberrypi.stackexchange.com/a/68174
 
