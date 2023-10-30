@@ -23,7 +23,7 @@ PN532-1.6 SPI Channel 0, CS Pin 8: UID '<redacted>' received.
 * Major refactoring to clean up the code and make it much easier to understand and use
 * All connection methods are working, there was a bug in the Serial receive method in the raspi-pn532 library
 * Added Pn532SamThread to make usage simple
-* Added Main/MainListener to provide example implementation
+* Added Example to provide example implementation
 * Added Pn532Utility for logging and exception handling
 * Added Pn532ContextHelper
 
@@ -35,7 +35,7 @@ PN532-1.6 SPI Channel 0, CS Pin 8: UID '<redacted>' received.
 ## Example Implementation
 Releases include a runnable jar which will run a Pn532SamThread for each connection type with default parameters.
 ```
-sudo java -jar raspi-pn532-v2-1.0.1.jar
+sudo java -jar raspi-pn532-v2-1.0.2.jar
 ```
 
 ## Library Usage
